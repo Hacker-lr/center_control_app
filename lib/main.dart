@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'services/device_connection.dart';
 import 'services/matrix_connection.dart';
 import 'services/big_screen_connection.dart';
+import 'services/camera_connection.dart';
 import 'services/device_config.dart';
 import 'pages/power_control_page.dart';
 import 'pages/big_screen_page.dart';
 import 'pages/video_matrix_page.dart';
+import 'pages/camera_control_page.dart';
 
 /// ============================================================
 /// 中控系统应用入口
@@ -101,6 +103,7 @@ class _MainPageState extends State<MainPage> {
   final DeviceConnection _deviceConnection = DeviceConnection();
   final BigScreenConnection _bigScreenConnection = BigScreenConnection();
   final MatrixConnection _matrixConnection = MatrixConnection();
+  final CameraConnectionManager _cameraManager = CameraConnectionManager();
 
   List<_PageEntry> _buildPageEntries() {
     final List<_PageEntry> entries = [];
@@ -138,6 +141,16 @@ class _MainPageState extends State<MainPage> {
         page: const VideoMatrixPage(),
         onConnect: () => _matrixConnection.connect(),
         onDisconnect: () => _matrixConnection.disconnect(),
+      ));
+    }
+
+    if (DeviceConfig.showCameraControl) {
+      entries.add(_PageEntry(
+        icon: Icons.videocam,
+        label: '摄像头',
+        page: const CameraControlPage(),
+        onConnect: () => _cameraManager.connectCamera(1), // 进入页面时默认连接第1个摄像头
+        onDisconnect: () => _cameraManager.disconnectAll(), // 离开页面时断开所有摄像头
       ));
     }
 

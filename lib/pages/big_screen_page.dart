@@ -212,7 +212,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 120, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 130, vertical: 6),
       child: LayoutBuilder(
         builder: (context, constraints) {
           return Stack(

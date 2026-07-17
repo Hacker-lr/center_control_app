@@ -35,6 +35,22 @@ class DeviceConfig {
   /// 请根据实际设备端口进行修改
   static const int bigScreenDevicePort = 5000;
 
+  // ==================== 摄像头设备配置 ====================
+
+  /// [开发者修改处] 摄像头设备列表配置
+  /// 每个摄像头独立配置IP和端口，选中时仅连接对应设备，其余断开
+  /// ip: 摄像头VISCA over IP网关地址
+  /// port: VISCA over IP端口（默认52381）
+  /// viscaAddr: VISCA协议中的摄像机地址（1-7，指令中会加上0x80偏移）
+  /// 列表长度即为摄像头数量，无需单独配置 cameraCount
+  static const List<Map<String, dynamic>> cameraDevices = [
+    {'ip': '192.168.0.64', 'port': 52381, 'viscaAddr': 1},
+    {'ip': '192.168.0.65', 'port': 52381, 'viscaAddr': 1},
+    {'ip': '192.168.0.66', 'port': 52381, 'viscaAddr': 1},
+    {'ip': '192.168.0.67', 'port': 52381, 'viscaAddr': 1},
+    {'ip': '192.168.0.68', 'port': 52381, 'viscaAddr': 1},
+  ];
+
   // ==================== 页面显示开关配置 ====================
 
   /// [开发者修改处] 是否显示"时序电源控制"页面及其底部导航按钮
@@ -53,9 +69,12 @@ class DeviceConfig {
   /// false = 隐藏视频矩阵页面，底部菜单栏不显示按钮，不可跳转
   static const bool showVideoMatrix = true;
 
+  /// [开发者修改处] 是否显示"摄像头控制"页面及其底部导航按钮
+  /// true  = 显示摄像头控制页面，底部菜单栏显示对应按钮，可跳转
+  /// false = 隐藏摄像头控制页面，底部菜单栏不显示按钮，不可跳转
+  static const bool showCameraControl = true;
+
   // [开发者扩展处] 新增设备页面时在此添加布尔开关
-  // 示例:
-  // static const bool showAudioControl = true;
 
   // ==================== 大屏分屏按钮显示开关配置 ====================
 
@@ -117,6 +136,11 @@ class DeviceConfig {
   /// true  = 16进制模式：将指令解析为空格分隔的16进制字节发送
   static const bool bigScreenSendAsHex = false;
 
+  /// [开发者修改处] 摄像头设备 - 指令发送模式
+  /// VISCA协议必须使用16进制模式，请勿修改
+  /// true = 16进制模式：将指令解析为空格分隔的16进制字节发送
+  static const bool cameraSendAsHex = true;
+
   // ==================== 视频矩阵通道配置 ====================
 
   /// [开发者修改处] 视频矩阵输入通道数量
@@ -172,4 +196,18 @@ class DeviceConfig {
   /// [开发者可修改] 大屏拼接器分屏切换 - 16进制指令模板
   /// 使用 {layout02X} 占位符
   static const String hexBigScreenLayoutCmd = '03 01 {layout02X} FF';
+
+  // ==================== 摄像头参数配置 ====================
+
+  /// 摄像头数量（由 cameraDevices 列表长度决定，此处仅作备用参考）
+  static const int cameraCount = 5;
+
+  /// [开发者修改处] 摄像头云台低速（VISCA协议范围：01-18）
+  static const int cameraSpeedLow = 1;
+
+  /// [开发者修改处] 摄像头云台高速（VISCA协议范围：01-18）
+  static const int cameraSpeedHigh = 15;
+
+  /// [开发者修改处] 预置位数量（1-12）
+  static const int cameraPresetCount = 8;
 }
