@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'services/device_connection.dart';
 import 'services/matrix_connection.dart';
 import 'services/big_screen_connection.dart';
+import 'services/camera_connection.dart';
 import 'services/device_config.dart';
 import 'pages/power_control_page.dart';
 import 'pages/big_screen_page.dart';
 import 'pages/video_matrix_page.dart';
+import 'pages/camera_control_page.dart';
+import 'pages/debug_config_page.dart';
 
 /// ============================================================
 /// 中控系统应用入口
@@ -98,14 +101,19 @@ class _MainPageState extends State<MainPage> {
   int _currentIndex = 0;
   final PageController _pageController = PageController(initialPage: 0);
 
+  final DeviceConfig _config = DeviceConfig();
   final DeviceConnection _deviceConnection = DeviceConnection();
   final BigScreenConnection _bigScreenConnection = BigScreenConnection();
   final MatrixConnection _matrixConnection = MatrixConnection();
+  final CameraConnectionManager _cameraManager = CameraConnectionManager();
 
+  /// 根据当前配置动态构建页面列表
+  /// 每次调用都会重新读取 DeviceConfig 中的显示开关状态
+  /// 这样配置页面修改开关后，返回主页面能立即生效
   List<_PageEntry> _buildPageEntries() {
     final List<_PageEntry> entries = [];
 
-    if (DeviceConfig.showPowerControl) {
+    if (_config.showPowerControl) {
       entries.add(_PageEntry(
         icon: Icons.bolt,
         label: '电源控制',
@@ -115,7 +123,7 @@ class _MainPageState extends State<MainPage> {
       ));
     }
 
-    if (DeviceConfig.showBigScreen) {
+    if (_config.showBigScreen) {
       entries.add(_PageEntry(
         icon: Icons.tv,
         label: '大屏控制',
@@ -131,7 +139,7 @@ class _MainPageState extends State<MainPage> {
       ));
     }
 
-    if (DeviceConfig.showVideoMatrix) {
+    if (_config.showVideoMatrix) {
       entries.add(_PageEntry(
         icon: Icons.videocam_outlined,
         label: '视频矩阵',
@@ -141,15 +149,53 @@ class _MainPageState extends State<MainPage> {
       ));
     }
 
+    if (_config.showCameraControl) {
+      entries.add(_PageEntry(
+        icon: Icons.videocam,
+        label: '摄像头',
+        page: const CameraControlPage(),
+        onConnect: () => _cameraManager.connectCamera(1), // 进入页面时默认连接第1个摄像头
+        onDisconnect: () => _cameraManager.disconnectAll(), // 离开页面时断开所有摄像头
+      ));
+    }
+
     return entries;
   }
 
-  late final List<_PageEntry> _pageEntries = _buildPageEntries();
+  /// 当前页面条目列表（每次build时动态获取，确保配置修改后实时生效）
+  List<_PageEntry> get _pageEntries => _buildPageEntries();
   int get _pageCount => _pageEntries.length;
+
+  /// DeviceConfig 配置变化监听器
+  /// 用于在配置页面修改开关后，返回主页面时自动刷新页面列表
+  void _onConfigChanged() {
+    if (!mounted) return;
+
+    // 确保当前索引在有效范围内
+    final int count = _pageCount;
+    if (count == 0) {
+      setState(() => _currentIndex = 0);
+      return;
+    }
+    if (_currentIndex >= count) {
+      // 当前索引超出范围，自动调整到最后一页
+      final int newIndex = count - 1;
+      _pageEntries[newIndex].onConnect();
+      setState(() => _currentIndex = newIndex);
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(newIndex);
+      }
+    } else {
+      // 索引有效，仅刷新界面
+      setState(() {});
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    // 注册配置变化监听器，配置页面修改后返回时能自动刷新
+    _config.addListener(_onConfigChanged);
     if (_pageCount == 0) {
       debugPrint('[主页面] 警告：没有启用的页面！请在 DeviceConfig 中设置 showXxx = true');
       return;
@@ -178,6 +224,8 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    // 移除配置变化监听器，避免内存泄漏
+    _config.removeListener(_onConfigChanged);
     _pageController.dispose();
     if (_pageCount > 0 && _currentIndex < _pageCount) {
       _pageEntries[_currentIndex].onDisconnect();
@@ -210,9 +258,19 @@ class _MainPageState extends State<MainPage> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      title: const Text(
-        '欢迎使用中控系统',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFD4C5A9), letterSpacing: 2.0),
+      title: GestureDetector(
+        onLongPress: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const DebugConfigPage(),
+            ),
+          );
+        },
+        child: const Text(
+          '欢迎使用中控系统',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFD4C5A9), letterSpacing: 2.0),
+        ),
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
