@@ -10,14 +10,20 @@ class DeviceConnection extends BaseConnection {
   factory DeviceConnection() => _instance;
   DeviceConnection._internal();
 
-  @override
-  String get deviceIp => DeviceConfig.powerDeviceIp;
+  /// 配置实例
+  final DeviceConfig _config = DeviceConfig();
 
   @override
-  int get devicePort => DeviceConfig.powerDevicePort;
+  String get deviceIp => _config.powerDeviceIp;
 
   @override
-  bool get sendAsHex => DeviceConfig.powerSendAsHex;
+  int get devicePort => _config.powerDevicePort;
+
+  @override
+  bool get useTcp => _config.powerUseTcp;
+
+  @override
+  bool get sendAsHex => _config.powerSendAsHex;
 
   @override
   String get heartbeatCommand => 'HEARTBEAT\r\n';

@@ -10,14 +10,20 @@ class BigScreenConnection extends BaseConnection {
   factory BigScreenConnection() => _instance;
   BigScreenConnection._internal();
 
-  @override
-  String get deviceIp => DeviceConfig.bigScreenDeviceIp;
+  /// 配置实例
+  final DeviceConfig _config = DeviceConfig();
 
   @override
-  int get devicePort => DeviceConfig.bigScreenDevicePort;
+  String get deviceIp => _config.bigScreenDeviceIp;
 
   @override
-  bool get sendAsHex => DeviceConfig.bigScreenSendAsHex;
+  int get devicePort => _config.bigScreenDevicePort;
+
+  @override
+  bool get useTcp => _config.bigScreenUseTcp;
+
+  @override
+  bool get sendAsHex => _config.bigScreenSendAsHex;
 
   @override
   String get heartbeatCommand => 'HEARTBEAT\r\n';

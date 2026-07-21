@@ -1,175 +1,807 @@
-// ignore_for_file: dangling_library_doc_comments
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 /// ============================================================
-/// [开发者注意] 设备通信配置常量
-/// 修改以下IP地址与端口号即可适配不同的设备环境
+/// [开发者注意] 全局配置中心（动态版本）
+/// 所有设备参数、布局参数、UI主题、交互参数均集中于此
+/// 修改本文件即可适配不同设备环境或调整UI表现
+/// 配置支持运行时修改，修改后自动保存到 SharedPreferences 持久化存储
+/// 修改配置后调用 notifyListeners() 通知所有监听者刷新
 /// ============================================================
+class DeviceConfig extends ChangeNotifier {
+  /// 单例实例
+  static final DeviceConfig _instance = DeviceConfig._internal();
+  factory DeviceConfig() => _instance;
+  DeviceConfig._internal() {
+    init(); // 启动时从 SharedPreferences 加载配置
+  }
 
-class DeviceConfig {
-  // ==================== 时序电源设备配置 ====================
+  /// SharedPreferences 实例
+  SharedPreferences? _prefs;
 
-  /// [开发者修改处] 时序电源设备的IP地址
-  /// 请根据实际设备IP进行修改
-  static const String powerDeviceIp = '192.168.0.64';
+  /// ============================================================
+  /// 配置键前缀
+  /// ============================================================
+  static const String _keyPrefix = 'center_control_config_';
 
-  /// [开发者修改处] 时序电源设备的TCP端口号
-  /// 请根据实际设备端口进行修改
-  static const int powerDevicePort = 5000;
+  /// ============================================================
+  /// 一、时序电源设备配置
+  /// ============================================================
 
-  // ==================== 视频矩阵设备配置 ====================
+  /// 时序电源设备的IP地址
+  String _powerDeviceIp = '192.168.0.64';
+  String get powerDeviceIp => _powerDeviceIp;
+  void setPowerDeviceIp(String value) {
+    _powerDeviceIp = value;
+    _saveString('powerDeviceIp', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 视频矩阵设备的IP地址
-  /// 请根据实际设备IP进行修改
-  static const String matrixDeviceIp = '192.168.0.64';
+  /// 时序电源设备的TCP端口号
+  int _powerDevicePort = 5000;
+  int get powerDevicePort => _powerDevicePort;
+  void setPowerDevicePort(int value) {
+    _powerDevicePort = value;
+    _saveInt('powerDevicePort', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 视频矩阵设备的TCP端口号
-  /// 请根据实际设备端口进行修改
-  static const int matrixDevicePort = 5000;
+  /// ============================================================
+  /// 二、视频矩阵设备配置
+  /// ============================================================
 
-  // ==================== 大屏拼接器设备配置 ====================
+  /// 视频矩阵设备的IP地址
+  String _matrixDeviceIp = '192.168.0.64';
+  String get matrixDeviceIp => _matrixDeviceIp;
+  void setMatrixDeviceIp(String value) {
+    _matrixDeviceIp = value;
+    _saveString('matrixDeviceIp', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏拼接器设备的IP地址
-  /// 请根据实际设备IP进行修改
-  static const String bigScreenDeviceIp = '192.168.0.64';
+  /// 视频矩阵设备的TCP端口号
+  int _matrixDevicePort = 5000;
+  int get matrixDevicePort => _matrixDevicePort;
+  void setMatrixDevicePort(int value) {
+    _matrixDevicePort = value;
+    _saveInt('matrixDevicePort', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏拼接器设备的TCP端口号
-  /// 请根据实际设备端口进行修改
-  static const int bigScreenDevicePort = 5000;
+  /// ============================================================
+  /// 三、大屏拼接器设备配置
+  /// ============================================================
 
-  // ==================== 页面显示开关配置 ====================
+  /// 大屏拼接器设备的IP地址
+  String _bigScreenDeviceIp = '192.168.0.64';
+  String get bigScreenDeviceIp => _bigScreenDeviceIp;
+  void setBigScreenDeviceIp(String value) {
+    _bigScreenDeviceIp = value;
+    _saveString('bigScreenDeviceIp', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 是否显示"时序电源控制"页面及其底部导航按钮
-  /// true  = 显示电源控制页面，底部菜单栏显示对应按钮，可跳转
-  /// false = 隐藏电源控制页面，底部菜单栏不显示按钮，不可跳转
-  /// 后续新增页面均按此模式添加对应的布尔开关
-  static const bool showPowerControl = true;
+  /// 大屏拼接器设备的TCP端口号
+  int _bigScreenDevicePort = 5000;
+  int get bigScreenDevicePort => _bigScreenDevicePort;
+  void setBigScreenDevicePort(int value) {
+    _bigScreenDevicePort = value;
+    _saveInt('bigScreenDevicePort', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 是否显示"大屏控制"页面及其底部导航按钮
-  /// true  = 显示大屏控制页面，底部菜单栏显示对应按钮，可跳转
-  /// false = 隐藏大屏控制页面，底部菜单栏不显示按钮，不可跳转
-  static const bool showBigScreen = true;
+  /// ============================================================
+  /// 四、摄像头设备配置
+  /// ============================================================
 
-  /// [开发者修改处] 是否显示"视频矩阵控制"页面及其底部导航按钮
-  /// true  = 显示视频矩阵页面，底部菜单栏显示对应按钮，可跳转
-  /// false = 隐藏视频矩阵页面，底部菜单栏不显示按钮，不可跳转
-  static const bool showVideoMatrix = true;
+  /// 摄像头设备列表配置
+  /// 每个摄像头独立配置IP和端口，选中时仅连接对应设备，其余断开
+  /// ip: 摄像头VISCA over IP网关地址
+  /// port: VISCA over IP端口（默认52381）
+  /// viscaAddr: VISCA协议中的摄像机地址（1-7，指令中会加上0x80偏移）
+  /// 列表长度即为摄像头数量，无需单独配置 cameraCount
+  List<Map<String, dynamic>> _cameraDevices = [
+    {'ip': '192.168.0.64', 'port': 52381, 'viscaAddr': 1},
+    {'ip': '192.168.0.65', 'port': 52381, 'viscaAddr': 1},
+    {'ip': '192.168.0.66', 'port': 52381, 'viscaAddr': 1},
+    {'ip': '192.168.0.67', 'port': 52381, 'viscaAddr': 1},
+    {'ip': '192.168.0.68', 'port': 52381, 'viscaAddr': 1},
+  ];
+  List<Map<String, dynamic>> get cameraDevices => _cameraDevices;
+  void setCameraDevices(List<Map<String, dynamic>> value) {
+    _cameraDevices = value;
+    _saveCameraDevices();
+    notifyListeners();
+  }
 
-  // [开发者扩展处] 新增设备页面时在此添加布尔开关
-  // 示例:
-  // static const bool showAudioControl = true;
+  /// ============================================================
+  /// 五、页面显示开关配置
+  /// ============================================================
 
-  // ==================== 大屏分屏按钮显示开关配置 ====================
+  /// 是否显示"时序电源控制"页面及其底部导航按钮
+  bool _showPowerControl = true;
+  bool get showPowerControl => _showPowerControl;
+  void setShowPowerControl(bool value) {
+    _showPowerControl = value;
+    _saveBool('showPowerControl', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏页 - 是否显示"全屏"按钮
-  static const bool showBigScreenFull = true;
+  /// 是否显示"大屏控制"页面及其底部导航按钮
+  bool _showBigScreen = true;
+  bool get showBigScreen => _showBigScreen;
+  void setShowBigScreen(bool value) {
+    _showBigScreen = value;
+    _saveBool('showBigScreen', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏页 - 是否显示"全屏16:9"按钮
-  static const bool showBigScreenFull169 = true;
+  /// 是否显示"视频矩阵控制"页面及其底部导航按钮
+  bool _showVideoMatrix = true;
+  bool get showVideoMatrix => _showVideoMatrix;
+  void setShowVideoMatrix(bool value) {
+    _showVideoMatrix = value;
+    _saveBool('showVideoMatrix', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏页 - 是否显示"二分屏"按钮
-  static const bool showBigScreenSplit2 = true;
+  /// 是否显示"摄像头控制"页面及其底部导航按钮
+  bool _showCameraControl = true;
+  bool get showCameraControl => _showCameraControl;
+  void setShowCameraControl(bool value) {
+    _showCameraControl = value;
+    _saveBool('showCameraControl', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏页 - 是否显示"三分屏"按钮
-  static const bool showBigScreenSplit3 = true;
+  /// ============================================================
+  /// 六、大屏分屏按钮显示开关配置
+  /// ============================================================
 
-  /// [开发者修改处] 大屏页 - 是否显示"四分屏"按钮
-  static const bool showBigScreenSplit4 = true;
+  bool _showBigScreenFull = true;
+  bool get showBigScreenFull => _showBigScreenFull;
+  void setShowBigScreenFull(bool value) {
+    _showBigScreenFull = value;
+    _saveBool('showBigScreenFull', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏页 - 是否显示"五分屏"按钮
-  static const bool showBigScreenSplit5 = true;
+  bool _showBigScreenFull169 = true;
+  bool get showBigScreenFull169 => _showBigScreenFull169;
+  void setShowBigScreenFull169(bool value) {
+    _showBigScreenFull169 = value;
+    _saveBool('showBigScreenFull169', value);
+    notifyListeners();
+  }
 
-  // ==================== 连接通用配置 ====================
+  bool _showBigScreenSplit2 = true;
+  bool get showBigScreenSplit2 => _showBigScreenSplit2;
+  void setShowBigScreenSplit2(bool value) {
+    _showBigScreenSplit2 = value;
+    _saveBool('showBigScreenSplit2', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 心跳包发送间隔（秒）
-  /// 默认60秒一次心跳，可根据需要调整
-  static const int heartbeatIntervalSeconds = 60;
+  bool _showBigScreenSplit3 = true;
+  bool get showBigScreenSplit3 => _showBigScreenSplit3;
+  void setShowBigScreenSplit3(bool value) {
+    _showBigScreenSplit3 = value;
+    _saveBool('showBigScreenSplit3', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 重连间隔（秒）
-  /// 断连后每隔5秒尝试重连一次
-  static const int reconnectIntervalSeconds = 5;
+  bool _showBigScreenSplit4 = true;
+  bool get showBigScreenSplit4 => _showBigScreenSplit4;
+  void setShowBigScreenSplit4(bool value) {
+    _showBigScreenSplit4 = value;
+    _saveBool('showBigScreenSplit4', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 连接超时时间（秒）
-  static const int connectionTimeoutSeconds = 5;
+  bool _showBigScreenSplit5 = true;
+  bool get showBigScreenSplit5 => _showBigScreenSplit5;
+  void setShowBigScreenSplit5(bool value) {
+    _showBigScreenSplit5 = value;
+    _saveBool('showBigScreenSplit5', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 通信协议类型：true = TCP, false = UDP
-  /// 根据实际设备支持的协议进行选择
-  static const bool useTcp = true;
+  /// ============================================================
+  /// 七、网络连接通用配置
+  /// ============================================================
 
-  // ==================== 指令发送模式配置（每种设备独立控制） ====================
+  /// 连接超时时间（秒）
+  int _connectionTimeoutSeconds = 5;
+  int get connectionTimeoutSeconds => _connectionTimeoutSeconds;
+  void setConnectionTimeoutSeconds(int value) {
+    _connectionTimeoutSeconds = value;
+    _saveInt('connectionTimeoutSeconds', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 时序电源设备 - 指令发送模式
-  /// false = ASCII字符串模式：直接将指令字符串按字符编码发送
-  ///         示例: "POWER_ON\r\n" → 发送 "POWER_ON\r\n" 的 ASCII 字节
-  /// true  = 16进制模式：将指令解析为空格分隔的16进制字节发送
-  ///         示例: "01 05 00 00 FF 00" → 发送 [0x01,0x05,0x00,0x00,0xFF,0x00]
-  /// 根据实际设备支持的协议格式选择
-  static const bool powerSendAsHex = false;
+  /// 心跳包发送间隔（秒）
+  int _heartbeatIntervalSeconds = 60;
+  int get heartbeatIntervalSeconds => _heartbeatIntervalSeconds;
+  void setHeartbeatIntervalSeconds(int value) {
+    _heartbeatIntervalSeconds = value;
+    _saveInt('heartbeatIntervalSeconds', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 视频矩阵设备 - 指令发送模式
-  /// false = ASCII字符串模式：直接将指令字符串按字符编码发送
-  ///         示例: "MATRIX:IN3->OUT5\r\n" → 发送文本的 ASCII 字节
-  /// true  = 16进制模式：将指令解析为空格分隔的16进制字节发送
-  ///         示例: "02 03 01 03 FF" → 发送 [0x02,0x03,0x01,0x03,0xFF]
-  /// 根据实际设备支持的协议格式选择
-  static const bool matrixSendAsHex = false;
+  /// 心跳超时判定倍数
+  int _heartbeatTimeoutMultiplier = 3;
+  int get heartbeatTimeoutMultiplier => _heartbeatTimeoutMultiplier;
+  void setHeartbeatTimeoutMultiplier(int value) {
+    _heartbeatTimeoutMultiplier = value;
+    _saveInt('heartbeatTimeoutMultiplier', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏拼接器设备 - 指令发送模式
-  /// false = ASCII字符串模式：直接将指令字符串按字符编码发送
-  /// true  = 16进制模式：将指令解析为空格分隔的16进制字节发送
-  static const bool bigScreenSendAsHex = false;
+  /// 自动重连间隔（秒）
+  int _reconnectIntervalSeconds = 5;
+  int get reconnectIntervalSeconds => _reconnectIntervalSeconds;
+  void setReconnectIntervalSeconds(int value) {
+    _reconnectIntervalSeconds = value;
+    _saveInt('reconnectIntervalSeconds', value);
+    notifyListeners();
+  }
 
-  // ==================== 视频矩阵通道配置 ====================
+  /// 通信协议类型：true = TCP, false = UDP（全局配置，已废弃，保留兼容性）
+  bool _useTcp = true;
+  bool get useTcp => _useTcp;
+  void setUseTcp(bool value) {
+    _useTcp = value;
+    _saveBool('useTcp', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 视频矩阵输入通道数量
-  /// 可根据实际矩阵规模调整
-  static const int matrixInputCount = 8;
+  /// 时序电源设备 - true=TCP协议, false=UDP协议
+  bool _powerUseTcp = true;
+  bool get powerUseTcp => _powerUseTcp;
+  void setPowerUseTcp(bool value) {
+    _powerUseTcp = value;
+    _saveBool('powerUseTcp', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 视频矩阵输出通道数量
-  /// 可根据实际矩阵规模调整
-  static const int matrixOutputCount = 8;
+  /// 视频矩阵设备 - true=TCP协议, false=UDP协议
+  bool _matrixUseTcp = true;
+  bool get matrixUseTcp => _matrixUseTcp;
+  void setMatrixUseTcp(bool value) {
+    _matrixUseTcp = value;
+    _saveBool('matrixUseTcp', value);
+    notifyListeners();
+  }
 
-  // ==================== 大屏分屏输出通道映射 ====================
+  /// 大屏拼接器设备 - true=TCP协议, false=UDP协议
+  bool _bigScreenUseTcp = true;
+  bool get bigScreenUseTcp => _bigScreenUseTcp;
+  void setBigScreenUseTcp(bool value) {
+    _bigScreenUseTcp = value;
+    _saveBool('bigScreenUseTcp', value);
+    notifyListeners();
+  }
 
-  /// [开发者修改处] 大屏分屏区域对应的矩阵输出通道（1-based，按分屏区域顺序）
-  /// 默认使用矩阵最后5个输出通道
-  /// 索引对应：0=分屏区域1, 1=分屏区域2, 2=分屏区域3, 3=分屏区域4, 4=分屏区域5
-  /// 全屏/全屏16:9使用 channels[0]（输出4）
-  /// 二分屏使用 channels[0..1]（输出4, 5）
-  /// 三分屏使用 channels[0..2]（输出4, 5, 6）
-  /// 四分屏使用 channels[0..3]（输出4, 5, 6, 7）
-  /// 五分屏使用 channels[0..4]（输出4, 5, 6, 7, 8）
-  static const List<int> bigScreenOutputChannels = [4, 5, 6, 7, 8];
+  /// ============================================================
+  /// 八、指令发送模式配置（每种设备独立控制）
+  /// ============================================================
 
-  // ==================== ASCII 指令配置 ====================
-  // 仅当对应设备的 sendAsHex = false 时生效
+  /// 时序电源设备 - false=ASCII模式, true=16进制模式
+  bool _powerSendAsHex = false;
+  bool get powerSendAsHex => _powerSendAsHex;
+  void setPowerSendAsHex(bool value) {
+    _powerSendAsHex = value;
+    _saveBool('powerSendAsHex', value);
+    notifyListeners();
+  }
 
-  /// [开发者可修改] 电源开 - ASCII 指令
-  static const String powerOnAsciiCmd = 'POWER_ON\r\n';
+  /// 视频矩阵设备 - false=ASCII模式, true=16进制模式
+  bool _matrixSendAsHex = false;
+  bool get matrixSendAsHex => _matrixSendAsHex;
+  void setMatrixSendAsHex(bool value) {
+    _matrixSendAsHex = value;
+    _saveBool('matrixSendAsHex', value);
+    notifyListeners();
+  }
 
-  /// [开发者可修改] 电源关 - ASCII 指令
-  static const String powerOffAsciiCmd = 'POWER_OFF\r\n';
+  /// 大屏拼接器设备 - false=ASCII模式, true=16进制模式
+  bool _bigScreenSendAsHex = false;
+  bool get bigScreenSendAsHex => _bigScreenSendAsHex;
+  void setBigScreenSendAsHex(bool value) {
+    _bigScreenSendAsHex = value;
+    _saveBool('bigScreenSendAsHex', value);
+    notifyListeners();
+  }
 
-  /// [开发者可修改] 视频矩阵通道切换 - ASCII 指令模板
-  /// 使用 {input} 和 {output} 占位符，运行时会替换为实际通道编号
-  static const String matrixSwitchAsciiCmd = 'MATRIX:IN{input}->OUT{output}\r\n';
+  /// 摄像头设备 - VISCA协议必须使用16进制模式，请勿修改
+  bool _cameraSendAsHex = true;
+  bool get cameraSendAsHex => _cameraSendAsHex;
+  void setCameraSendAsHex(bool value) {
+    _cameraSendAsHex = value;
+    _saveBool('cameraSendAsHex', value);
+    notifyListeners();
+  }
 
-  /// [开发者可修改] 大屏分屏布局切换 - ASCII 指令模板
-  /// 使用 {layout} 占位符，运行时会替换为分屏模式编号
-  static const String bigScreenLayoutAsciiCmd = 'LAYOUT:{layout}\r\n';
+  /// ============================================================
+  /// 九、视频矩阵通道配置
+  /// ============================================================
 
-  // ==================== 16进制指令配置 ====================
-  // 仅当对应设备的 sendAsHex = true 时生效
+  /// 视频矩阵输入通道数量
+  int _matrixInputCount = 16;
+  int get matrixInputCount => _matrixInputCount;
+  void setMatrixInputCount(int value) {
+    _matrixInputCount = value;
+    _saveInt('matrixInputCount', value);
+    notifyListeners();
+  }
 
-  /// [开发者可修改] 电源开 - 16进制指令
-  static const String hexPowerOnCmd = '01 05 00 00 FF 00';
+  /// 视频矩阵输出通道数量
+  int _matrixOutputCount = 16;
+  int get matrixOutputCount => _matrixOutputCount;
+  void setMatrixOutputCount(int value) {
+    _matrixOutputCount = value;
+    _saveInt('matrixOutputCount', value);
+    notifyListeners();
+  }
 
-  /// [开发者可修改] 电源关 - 16进制指令
-  static const String hexPowerOffCmd = '01 05 00 00 00 00';
+  /// ============================================================
+  /// 十、大屏分屏输出通道映射
+  /// ============================================================
 
-  /// [开发者可修改] 视频矩阵切换 - 16进制指令模板
-  /// 使用 {input02X} 和 {output02X} 占位符
-  static const String hexMatrixSwitchCmd = '02 03 {input02X} {output02X} FF';
+  /// 大屏分屏区域对应的矩阵输出通道（1-based，按分屏区域顺序）
+  List<int> _bigScreenOutputChannels = [4, 5, 6, 7, 8];
+  List<int> get bigScreenOutputChannels => _bigScreenOutputChannels;
+  void setBigScreenOutputChannels(List<int> value) {
+    _bigScreenOutputChannels = value;
+    _saveBigScreenOutputChannels();
+    notifyListeners();
+  }
 
-  /// [开发者可修改] 大屏拼接器分屏切换 - 16进制指令模板
-  /// 使用 {layout02X} 占位符
-  static const String hexBigScreenLayoutCmd = '03 01 {layout02X} FF';
+  /// ============================================================
+  /// 十一、ASCII 指令模板配置（仅 sendAsHex=false 时生效）
+  /// ============================================================
+
+  String _powerOnAsciiCmd = 'POWER_ON\r\n';
+  String get powerOnAsciiCmd => _powerOnAsciiCmd;
+  void setPowerOnAsciiCmd(String value) {
+    _powerOnAsciiCmd = value;
+    _saveString('powerOnAsciiCmd', value);
+    notifyListeners();
+  }
+
+  String _powerOffAsciiCmd = 'POWER_OFF\r\n';
+  String get powerOffAsciiCmd => _powerOffAsciiCmd;
+  void setPowerOffAsciiCmd(String value) {
+    _powerOffAsciiCmd = value;
+    _saveString('powerOffAsciiCmd', value);
+    notifyListeners();
+  }
+
+  String _matrixSwitchAsciiCmd = 'MATRIX:IN{input}->OUT{output}\r\n';
+  String get matrixSwitchAsciiCmd => _matrixSwitchAsciiCmd;
+  void setMatrixSwitchAsciiCmd(String value) {
+    _matrixSwitchAsciiCmd = value;
+    _saveString('matrixSwitchAsciiCmd', value);
+    notifyListeners();
+  }
+
+  String _bigScreenLayoutAsciiCmd = 'LAYOUT:{layout}\r\n';
+  String get bigScreenLayoutAsciiCmd => _bigScreenLayoutAsciiCmd;
+  void setBigScreenLayoutAsciiCmd(String value) {
+    _bigScreenLayoutAsciiCmd = value;
+    _saveString('bigScreenLayoutAsciiCmd', value);
+    notifyListeners();
+  }
+
+  /// ============================================================
+  /// 十二、16进制指令模板配置（仅 sendAsHex=true 时生效）
+  /// ============================================================
+
+  String _hexPowerOnCmd = '01 05 00 00 FF 00';
+  String get hexPowerOnCmd => _hexPowerOnCmd;
+  void setHexPowerOnCmd(String value) {
+    _hexPowerOnCmd = value;
+    _saveString('hexPowerOnCmd', value);
+    notifyListeners();
+  }
+
+  String _hexPowerOffCmd = '01 05 00 00 00 00';
+  String get hexPowerOffCmd => _hexPowerOffCmd;
+  void setHexPowerOffCmd(String value) {
+    _hexPowerOffCmd = value;
+    _saveString('hexPowerOffCmd', value);
+    notifyListeners();
+  }
+
+  String _hexMatrixSwitchCmd = '02 03 {input02X} {output02X} FF';
+  String get hexMatrixSwitchCmd => _hexMatrixSwitchCmd;
+  void setHexMatrixSwitchCmd(String value) {
+    _hexMatrixSwitchCmd = value;
+    _saveString('hexMatrixSwitchCmd', value);
+    notifyListeners();
+  }
+
+  String _hexBigScreenLayoutCmd = '03 01 {layout02X} FF';
+  String get hexBigScreenLayoutCmd => _hexBigScreenLayoutCmd;
+  void setHexBigScreenLayoutCmd(String value) {
+    _hexBigScreenLayoutCmd = value;
+    _saveString('hexBigScreenLayoutCmd', value);
+    notifyListeners();
+  }
+
+  /// ============================================================
+  /// 十三、摄像头参数配置
+  /// ============================================================
+
+  int get cameraCount => _cameraDevices.length;
+
+  int _cameraSpeedLow = 1;
+  int get cameraSpeedLow => _cameraSpeedLow;
+  void setCameraSpeedLow(int value) {
+    _cameraSpeedLow = value;
+    _saveInt('cameraSpeedLow', value);
+    notifyListeners();
+  }
+
+  int _cameraSpeedHigh = 15;
+  int get cameraSpeedHigh => _cameraSpeedHigh;
+  void setCameraSpeedHigh(int value) {
+    _cameraSpeedHigh = value;
+    _saveInt('cameraSpeedHigh', value);
+    notifyListeners();
+  }
+
+  int _cameraPresetCount = 8;
+  int get cameraPresetCount => _cameraPresetCount;
+  void setCameraPresetCount(int value) {
+    _cameraPresetCount = value;
+    _saveInt('cameraPresetCount', value);
+    notifyListeners();
+  }
+
+  /// ============================================================
+  /// 十四、按钮网格布局配置
+  /// ============================================================
+
+  int _gridItemsPerPage = 16;
+  int get gridItemsPerPage => _gridItemsPerPage;
+  void setGridItemsPerPage(int value) {
+    _gridItemsPerPage = value;
+    _saveInt('gridItemsPerPage', value);
+    notifyListeners();
+  }
+
+  int _gridRowCount = 2;
+  int get gridRowCount => _gridRowCount;
+  void setGridRowCount(int value) {
+    _gridRowCount = value;
+    _saveInt('gridRowCount', value);
+    notifyListeners();
+  }
+
+  double _gridBtnHeightFactor = 0.80;
+  double get gridBtnHeightFactor => _gridBtnHeightFactor;
+  void setGridBtnHeightFactor(double value) {
+    _gridBtnHeightFactor = value;
+    _saveDouble('gridBtnHeightFactor', value);
+    notifyListeners();
+  }
+
+  double _gridSpacing4Cross = 10.0;
+  double get gridSpacing4Cross => _gridSpacing4Cross;
+  void setGridSpacing4Cross(double value) {
+    _gridSpacing4Cross = value;
+    _saveDouble('gridSpacing4Cross', value);
+    notifyListeners();
+  }
+
+  double _gridSpacing4Main = 8.0;
+  double get gridSpacing4Main => _gridSpacing4Main;
+  void setGridSpacing4Main(double value) {
+    _gridSpacing4Main = value;
+    _saveDouble('gridSpacing4Main', value);
+    notifyListeners();
+  }
+
+  double _gridSpacing8Cross = 6.0;
+  double get gridSpacing8Cross => _gridSpacing8Cross;
+  void setGridSpacing8Cross(double value) {
+    _gridSpacing8Cross = value;
+    _saveDouble('gridSpacing8Cross', value);
+    notifyListeners();
+  }
+
+  double _gridSpacing8Main = 6.0;
+  double get gridSpacing8Main => _gridSpacing8Main;
+  void setGridSpacing8Main(double value) {
+    _gridSpacing8Main = value;
+    _saveDouble('gridSpacing8Main', value);
+    notifyListeners();
+  }
+
+  double _gridHorizontalPadding = 24.0;
+  double get gridHorizontalPadding => _gridHorizontalPadding;
+  void setGridHorizontalPadding(double value) {
+    _gridHorizontalPadding = value;
+    _saveDouble('gridHorizontalPadding', value);
+    notifyListeners();
+  }
+
+  double _gridVerticalPadding = 16.0;
+  double get gridVerticalPadding => _gridVerticalPadding;
+  void setGridVerticalPadding(double value) {
+    _gridVerticalPadding = value;
+    _saveDouble('gridVerticalPadding', value);
+    notifyListeners();
+  }
+
+  /// ============================================================
+  /// 十五、按钮交互配置
+  /// ============================================================
+
+  int _longPressDurationMs = 2000;
+  int get longPressDurationMs => _longPressDurationMs;
+  void setLongPressDurationMs(int value) {
+    _longPressDurationMs = value;
+    _saveInt('longPressDurationMs', value);
+    notifyListeners();
+  }
+
+  int _longPressTickIntervalMs = 50;
+  int get longPressTickIntervalMs => _longPressTickIntervalMs;
+  void setLongPressTickIntervalMs(int value) {
+    _longPressTickIntervalMs = value;
+    _saveInt('longPressTickIntervalMs', value);
+    notifyListeners();
+  }
+
+  int _channelNameMaxLength = 10;
+  int get channelNameMaxLength => _channelNameMaxLength;
+  void setChannelNameMaxLength(int value) {
+    _channelNameMaxLength = value;
+    _saveInt('channelNameMaxLength', value);
+    notifyListeners();
+  }
+
+  /// ============================================================
+  /// 十六、UI 主题颜色配置（这些配置不支持运行时修改，如需修改请直接改代码）
+  /// ============================================================
+
+  static const Color colorCardBg = Color(0xFF0D1117);
+  static const Color colorCardBorder = Color(0xFF1E2228);
+  static const Color colorButtonBg = Color(0xFF2A2A3E);
+  static const Color colorButtonBorder = Color(0xFF3A3F48);
+  static const Color colorHighlightInput = Color(0xFF1F4068);
+  static const Color colorHighlightOutput = Color(0xFF3E6B48);
+  static const Color colorAccent = Color(0xFF6B9BD2);
+  static const Color colorPressing = Color(0xFFFFA726);
+  static const Color colorStatusConnected = Color(0xFF4CAF50);
+  static const Color colorStatusConnecting = Color(0xFFFFA726);
+  static const Color colorStatusError = Color(0xFFE53935);
+  static const Color colorStatusDisconnected = Color(0xFF9E9E9E);
+  static const Color colorSnackBarBg = Color(0xFF3A5A8C);
+  static const Color colorDialogBg = Color(0xFF161B22);
+  static const Color colorDialogFieldBg = Color(0xFF21262D);
+  static const Color colorSplitAreaBg = Color(0xFF1E2228);
+  static const Color colorSplitAreaBorder = Color(0xFF2A3038);
+
+  /// ============================================================
+  /// 十七、UI 动画与尺寸配置（这些配置不支持运行时修改，如需修改请直接改代码）
+  /// ============================================================
+
+  static const int animationDurationMs = 250;
+  static const int hintAnimationDurationMs = 300;
+  static const double buttonBorderRadiusRatio = 0.12;
+  static const double buttonShadowBlurRatio = 0.12;
+  static const double buttonShadowBlurSmallRatio = 0.05;
+  static const double buttonFontSizeRatio = 0.35;
+  static const double buttonPaddingHorizontalRatio = 0.08;
+  static const double buttonPaddingVerticalRatio = 0.10;
+  static const double longPressIndicatorHeight = 3.0;
+  static const double cardBorderRadius = 10.0;
+  static const double statusChipBorderRadius = 12.0;
+  static const double bannerBorderRadius = 10.0;
+  static const double splitAreaGap = 4.0;
+
+  /// ============================================================
+  /// 私有方法：初始化和持久化
+  /// ============================================================
+
+  /// 初始化 SharedPreferences 并加载配置
+  Future<void> init() async {
+    try {
+      if (_prefs == null) {
+        _prefs = await SharedPreferences.getInstance();
+        debugPrint('[DeviceConfig] SharedPreferences 初始化成功');
+        _loadAllConfig();
+      }
+    } catch (e) {
+      debugPrint('[DeviceConfig] SharedPreferences 初始化失败: $e');
+    }
+  }
+
+  /// 加载所有配置项
+  void _loadAllConfig() {
+    _powerDeviceIp = _loadString('powerDeviceIp', '192.168.0.64');
+    _powerDevicePort = _loadInt('powerDevicePort', 5000);
+    _matrixDeviceIp = _loadString('matrixDeviceIp', '192.168.0.64');
+    _matrixDevicePort = _loadInt('matrixDevicePort', 5000);
+    _bigScreenDeviceIp = _loadString('bigScreenDeviceIp', '192.168.0.64');
+    _bigScreenDevicePort = _loadInt('bigScreenDevicePort', 5000);
+    _loadCameraDevices();
+    _showPowerControl = _loadBool('showPowerControl', true);
+    _showBigScreen = _loadBool('showBigScreen', true);
+    _showVideoMatrix = _loadBool('showVideoMatrix', true);
+    _showCameraControl = _loadBool('showCameraControl', true);
+    _showBigScreenFull = _loadBool('showBigScreenFull', true);
+    _showBigScreenFull169 = _loadBool('showBigScreenFull169', true);
+    _showBigScreenSplit2 = _loadBool('showBigScreenSplit2', true);
+    _showBigScreenSplit3 = _loadBool('showBigScreenSplit3', true);
+    _showBigScreenSplit4 = _loadBool('showBigScreenSplit4', true);
+    _showBigScreenSplit5 = _loadBool('showBigScreenSplit5', true);
+    _connectionTimeoutSeconds = _loadInt('connectionTimeoutSeconds', 5);
+    _heartbeatIntervalSeconds = _loadInt('heartbeatIntervalSeconds', 60);
+    _heartbeatTimeoutMultiplier = _loadInt('heartbeatTimeoutMultiplier', 3);
+    _reconnectIntervalSeconds = _loadInt('reconnectIntervalSeconds', 5);
+    _useTcp = _loadBool('useTcp', true);
+    _powerUseTcp = _loadBool('powerUseTcp', true);
+    _matrixUseTcp = _loadBool('matrixUseTcp', true);
+    _bigScreenUseTcp = _loadBool('bigScreenUseTcp', true);
+    _powerSendAsHex = _loadBool('powerSendAsHex', false);
+    _matrixSendAsHex = _loadBool('matrixSendAsHex', false);
+    _bigScreenSendAsHex = _loadBool('bigScreenSendAsHex', false);
+    _cameraSendAsHex = _loadBool('cameraSendAsHex', true);
+    _matrixInputCount = _loadInt('matrixInputCount', 16);
+    _matrixOutputCount = _loadInt('matrixOutputCount', 16);
+    _loadBigScreenOutputChannels();
+    _powerOnAsciiCmd = _loadString('powerOnAsciiCmd', 'POWER_ON\r\n');
+    _powerOffAsciiCmd = _loadString('powerOffAsciiCmd', 'POWER_OFF\r\n');
+    _matrixSwitchAsciiCmd = _loadString('matrixSwitchAsciiCmd', 'MATRIX:IN{input}->OUT{output}\r\n');
+    _bigScreenLayoutAsciiCmd = _loadString('bigScreenLayoutAsciiCmd', 'LAYOUT:{layout}\r\n');
+    _hexPowerOnCmd = _loadString('hexPowerOnCmd', '01 05 00 00 FF 00');
+    _hexPowerOffCmd = _loadString('hexPowerOffCmd', '01 05 00 00 00 00');
+    _hexMatrixSwitchCmd = _loadString('hexMatrixSwitchCmd', '02 03 {input02X} {output02X} FF');
+    _hexBigScreenLayoutCmd = _loadString('hexBigScreenLayoutCmd', '03 01 {layout02X} FF');
+    _cameraSpeedLow = _loadInt('cameraSpeedLow', 1);
+    _cameraSpeedHigh = _loadInt('cameraSpeedHigh', 15);
+    _cameraPresetCount = _loadInt('cameraPresetCount', 8);
+    _gridItemsPerPage = _loadInt('gridItemsPerPage', 16);
+    _gridRowCount = _loadInt('gridRowCount', 2);
+    _gridBtnHeightFactor = _loadDouble('gridBtnHeightFactor', 0.80);
+    _gridSpacing4Cross = _loadDouble('gridSpacing4Cross', 10.0);
+    _gridSpacing4Main = _loadDouble('gridSpacing4Main', 8.0);
+    _gridSpacing8Cross = _loadDouble('gridSpacing8Cross', 6.0);
+    _gridSpacing8Main = _loadDouble('gridSpacing8Main', 6.0);
+    _gridHorizontalPadding = _loadDouble('gridHorizontalPadding', 24.0);
+    _gridVerticalPadding = _loadDouble('gridVerticalPadding', 16.0);
+    _longPressDurationMs = _loadInt('longPressDurationMs', 2000);
+    _longPressTickIntervalMs = _loadInt('longPressTickIntervalMs', 50);
+    _channelNameMaxLength = _loadInt('channelNameMaxLength', 10);
+    debugPrint('[DeviceConfig] 所有配置加载完成');
+  }
+
+  /// 重置所有配置为默认值
+  void resetAll() {
+    _powerDeviceIp = '192.168.0.64';
+    _powerDevicePort = 5000;
+    _matrixDeviceIp = '192.168.0.64';
+    _matrixDevicePort = 5000;
+    _bigScreenDeviceIp = '192.168.0.64';
+    _bigScreenDevicePort = 5000;
+    _cameraDevices = [
+      {'ip': '192.168.0.64', 'port': 52381, 'viscaAddr': 1},
+      {'ip': '192.168.0.65', 'port': 52381, 'viscaAddr': 1},
+      {'ip': '192.168.0.66', 'port': 52381, 'viscaAddr': 1},
+      {'ip': '192.168.0.67', 'port': 52381, 'viscaAddr': 1},
+      {'ip': '192.168.0.68', 'port': 52381, 'viscaAddr': 1},
+    ];
+    _showPowerControl = true;
+    _showBigScreen = true;
+    _showVideoMatrix = true;
+    _showCameraControl = true;
+    _showBigScreenFull = true;
+    _showBigScreenFull169 = true;
+    _showBigScreenSplit2 = true;
+    _showBigScreenSplit3 = true;
+    _showBigScreenSplit4 = true;
+    _showBigScreenSplit5 = true;
+    _connectionTimeoutSeconds = 5;
+    _heartbeatIntervalSeconds = 60;
+    _heartbeatTimeoutMultiplier = 3;
+    _reconnectIntervalSeconds = 5;
+    _useTcp = true;
+    _powerUseTcp = true;
+    _matrixUseTcp = true;
+    _bigScreenUseTcp = true;
+    _powerSendAsHex = false;
+    _matrixSendAsHex = false;
+    _bigScreenSendAsHex = false;
+    _cameraSendAsHex = true;
+    _matrixInputCount = 16;
+    _matrixOutputCount = 16;
+    _bigScreenOutputChannels = [4, 5, 6, 7, 8];
+    _powerOnAsciiCmd = 'POWER_ON\r\n';
+    _powerOffAsciiCmd = 'POWER_OFF\r\n';
+    _matrixSwitchAsciiCmd = 'MATRIX:IN{input}->OUT{output}\r\n';
+    _bigScreenLayoutAsciiCmd = 'LAYOUT:{layout}\r\n';
+    _hexPowerOnCmd = '01 05 00 00 FF 00';
+    _hexPowerOffCmd = '01 05 00 00 00 00';
+    _hexMatrixSwitchCmd = '02 03 {input02X} {output02X} FF';
+    _hexBigScreenLayoutCmd = '03 01 {layout02X} FF';
+    _cameraSpeedLow = 1;
+    _cameraSpeedHigh = 15;
+    _cameraPresetCount = 8;
+    _gridItemsPerPage = 16;
+    _gridRowCount = 2;
+    _gridBtnHeightFactor = 0.80;
+    _gridSpacing4Cross = 10.0;
+    _gridSpacing4Main = 8.0;
+    _gridSpacing8Cross = 6.0;
+    _gridSpacing8Main = 6.0;
+    _gridHorizontalPadding = 24.0;
+    _gridVerticalPadding = 16.0;
+    _longPressDurationMs = 2000;
+    _longPressTickIntervalMs = 50;
+    _channelNameMaxLength = 10;
+    _prefs?.clear();
+    notifyListeners();
+    debugPrint('[DeviceConfig] 所有配置已重置为默认值');
+  }
+
+  /// 持久化存储辅助方法
+  String _loadString(String key, String defaultValue) =>
+      _prefs?.getString('$_keyPrefix$key') ?? defaultValue;
+  int _loadInt(String key, int defaultValue) =>
+      _prefs?.getInt('$_keyPrefix$key') ?? defaultValue;
+  bool _loadBool(String key, bool defaultValue) =>
+      _prefs?.getBool('$_keyPrefix$key') ?? defaultValue;
+  double _loadDouble(String key, double defaultValue) =>
+      _prefs?.getDouble('$_keyPrefix$key') ?? defaultValue;
+
+  void _saveString(String key, String value) =>
+      _prefs?.setString('$_keyPrefix$key', value);
+  void _saveInt(String key, int value) =>
+      _prefs?.setInt('$_keyPrefix$key', value);
+  void _saveBool(String key, bool value) =>
+      _prefs?.setBool('$_keyPrefix$key', value);
+  void _saveDouble(String key, double value) =>
+      _prefs?.setDouble('$_keyPrefix$key', value);
+
+  /// 摄像头列表序列化/反序列化
+  void _saveCameraDevices() {
+    final List<String> encoded = _cameraDevices.map((dev) {
+      return '${dev['ip']},${dev['port']},${dev['viscaAddr']}';
+    }).toList();
+    _prefs?.setStringList('${_keyPrefix}cameraDevices', encoded);
+  }
+
+  void _loadCameraDevices() {
+    final List<String>? encoded =
+        _prefs?.getStringList('${_keyPrefix}cameraDevices');
+    if (encoded != null && encoded.isNotEmpty) {
+      _cameraDevices = encoded.map((str) {
+        final parts = str.split(',');
+        return {
+          'ip': parts.isNotEmpty ? parts[0] : '192.168.0.64',
+          'port': parts.length > 1 ? int.tryParse(parts[1]) ?? 52381 : 52381,
+          'viscaAddr': parts.length > 2 ? int.tryParse(parts[2]) ?? 1 : 1,
+        };
+      }).toList();
+    }
+  }
+
+  /// 大屏输出通道序列化/反序列化
+  void _saveBigScreenOutputChannels() {
+    _prefs?.setStringList('${_keyPrefix}bigScreenOutputChannels',
+        _bigScreenOutputChannels.map((e) => '$e').toList());
+  }
+
+  void _loadBigScreenOutputChannels() {
+    final List<String>? encoded =
+        _prefs?.getStringList('${_keyPrefix}bigScreenOutputChannels');
+    if (encoded != null && encoded.isNotEmpty) {
+      _bigScreenOutputChannels =
+          encoded.map((e) => int.tryParse(e) ?? 0).where((e) => e > 0).toList();
+    }
+  }
 }
