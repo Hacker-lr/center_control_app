@@ -214,8 +214,9 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _switchToPage(int newIndex) {
-    if (_currentIndex == newIndex || newIndex < 0 || newIndex >= _pageCount)
+    if (_currentIndex == newIndex || newIndex < 0 || newIndex >= _pageCount) {
       return;
+    }
 
     _pageEntries[_currentIndex].onDisconnect();
     _pageEntries[newIndex].onConnect();
