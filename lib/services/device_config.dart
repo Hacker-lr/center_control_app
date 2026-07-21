@@ -305,15 +305,21 @@ class DeviceConfig extends ChangeNotifier {
   /// 如果保存的品牌名称不在品牌配置列表中，重置为默认品牌
   /// 防止 DropdownButton 因 value 不在 items 中而报错
   void _validateBrandName() {
-    final bool matrixBrandValid = matrixBrandConfigs.any((b) => b.name == _matrixBrand);
+    final bool matrixBrandValid = matrixBrandConfigs.any(
+      (b) => b.name == _matrixBrand,
+    );
     if (!matrixBrandValid) {
       _matrixBrand = matrixBrandConfigs[0].name;
     }
-    final bool bigScreenBrandValid = bigScreenBrandConfigs.any((b) => b.name == _bigScreenBrand);
+    final bool bigScreenBrandValid = bigScreenBrandConfigs.any(
+      (b) => b.name == _bigScreenBrand,
+    );
     if (!bigScreenBrandValid) {
       _bigScreenBrand = bigScreenBrandConfigs[0].name;
     }
-    final bool powerBrandValid = powerBrandConfigs.any((b) => b.name == _powerBrand);
+    final bool powerBrandValid = powerBrandConfigs.any(
+      (b) => b.name == _powerBrand,
+    );
     if (!powerBrandValid) {
       _powerBrand = powerBrandConfigs[0].name;
     }

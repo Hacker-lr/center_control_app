@@ -93,7 +93,9 @@ class _PowerControlPageState extends State<PowerControlPage> {
         children: [
           // 卡片标题："时序电源控制"
           Padding(
-            padding: EdgeInsets.only(bottom: ResponsiveUtils.getSpacing(context, 12)),
+            padding: EdgeInsets.only(
+              bottom: ResponsiveUtils.getSpacing(context, 12),
+            ),
             child: Text(
               '时序电源控制',
               style: TextStyle(
@@ -217,7 +219,12 @@ class _PowerControlPageState extends State<PowerControlPage> {
   /// [onPressed] 点击回调函数
   /// ============================================================
   Widget _buildPowerButton(
-      String label, IconData icon, bool isActive, Color activeColor, VoidCallback onPressed) {
+    String label,
+    IconData icon,
+    bool isActive,
+    Color activeColor,
+    VoidCallback onPressed,
+  ) {
     // 获取响应式按钮尺寸
     final double buttonSize = ResponsiveUtils.getPowerButtonSize(context);
     // 图标大小为按钮尺寸的 30%
@@ -236,7 +243,9 @@ class _PowerControlPageState extends State<PowerControlPage> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           // 激活时使用主题色，非激活时使用深色背景
-          color: isActive ? activeColor.withAlpha(220) : const Color(0xFF1E2228),
+          color: isActive
+              ? activeColor.withAlpha(220)
+              : const Color(0xFF1E2228),
           // 激活时显示发光效果，非激活时显示阴影效果
           boxShadow: isActive
               ? [
@@ -264,7 +273,11 @@ class _PowerControlPageState extends State<PowerControlPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               // 图标
-              Icon(icon, size: iconSize, color: isActive ? Colors.white : Colors.grey[500]),
+              Icon(
+                icon,
+                size: iconSize,
+                color: isActive ? Colors.white : Colors.grey[500],
+              ),
               SizedBox(height: ResponsiveUtils.getSpacing(context, 6)),
               // 文字标签
               Text(

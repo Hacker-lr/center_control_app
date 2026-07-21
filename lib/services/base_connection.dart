@@ -9,10 +9,13 @@ import 'device_config.dart';
 enum ConnectionStatus {
   /// 未连接状态，设备尚未建立连接或已断开
   disconnected,
+
   /// 连接中状态，正在尝试建立连接
   connecting,
+
   /// 已连接状态，设备连接成功且正常通信
   connected,
+
   /// 错误状态，连接过程中发生错误
   error,
 }
@@ -24,25 +27,25 @@ enum ConnectionStatus {
 abstract class BaseConnection extends ChangeNotifier {
   /// TCP套接字实例，用于TCP模式下与设备进行网络通信，初始值为null表示未连接
   Socket? _tcpSocket;
-  
+
   /// UDP数据报套接字实例，用于UDP模式下与设备进行网络通信，初始值为null表示未连接
   RawDatagramSocket? _udpSocket;
-  
+
   /// 当前连接状态，初始值为disconnected表示未连接
   ConnectionStatus _status = ConnectionStatus.disconnected;
-  
+
   /// 心跳定时器，用于定期发送心跳包检测连接状态，初始值为null
   Timer? _heartbeatTimer;
-  
+
   /// 重连定时器，用于连接断开后自动尝试重连，初始值为null
   Timer? _reconnectTimer;
-  
+
   /// 最后一次收到心跳响应的时间戳，用于判断连接是否超时，初始值为null
   DateTime? _lastHeartbeatResponse;
-  
+
   /// 是否为手动断开连接的标志，初始值为false表示自动连接状态
   bool _isManualDisconnect = false;
-  
+
   /// 心跳包发送计数器，记录已发送的心跳包数量，初始值为0
   int _heartbeatCount = 0;
 
@@ -51,28 +54,28 @@ abstract class BaseConnection extends ChangeNotifier {
 
   /// 获取当前连接状态
   ConnectionStatus get status => _status;
-  
+
   /// 判断是否已连接，返回true表示已成功连接
   bool get isConnected => _status == ConnectionStatus.connected;
-  
+
   /// 获取心跳包发送次数
   int get heartbeatCount => _heartbeatCount;
-  
+
   /// 获取最后一次心跳响应的时间
   DateTime? get lastHeartbeatResponse => _lastHeartbeatResponse;
 
   /// 设备IP地址，子类必须实现此抽象属性
   String get deviceIp;
-  
+
   /// 设备端口号，子类必须实现此抽象属性
   int get devicePort;
-  
+
   /// 是否使用TCP协议（true=TCP，false=UDP），子类必须实现此抽象属性
   bool get useTcp;
-  
+
   /// 是否以十六进制格式发送数据，子类必须实现此抽象属性
   bool get sendAsHex;
-  
+
   /// 心跳检测命令，子类必须实现此抽象属性
   String get heartbeatCommand;
 
@@ -102,15 +105,15 @@ abstract class BaseConnection extends ChangeNotifier {
     _heartbeatTimer = null;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    
+
     // 清理TCP套接字
     _tcpSocket?.destroy();
     _tcpSocket = null;
-    
+
     // 清理UDP套接字
     _udpSocket?.close();
     _udpSocket = null;
-    
+
     _updateStatus(ConnectionStatus.disconnected);
     debugPrint('[$runtimeType] 已断开连接');
   }
@@ -158,8 +161,9 @@ abstract class BaseConnection extends ChangeNotifier {
       }
 
       if (sendAsHex) {
-        final hexStr =
-            data.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+        final hexStr = data
+            .map((b) => b.toRadixString(16).padLeft(2, '0'))
+            .join(' ');
         debugPrint('[$runtimeType] 指令发送成功(HEX): $command → [$hexStr]');
       } else {
         debugPrint('[$runtimeType] 指令发送成功: $command');
@@ -257,7 +261,9 @@ abstract class BaseConnection extends ChangeNotifier {
       final Datagram? datagram = _udpSocket!.receive();
       if (datagram != null) {
         _lastHeartbeatResponse = DateTime.now();
-        debugPrint('[$runtimeType] UDP收到数据: ${String.fromCharCodes(datagram.data)}');
+        debugPrint(
+          '[$runtimeType] UDP收到数据: ${String.fromCharCodes(datagram.data)}',
+        );
       }
     }
   }
@@ -286,7 +292,7 @@ abstract class BaseConnection extends ChangeNotifier {
     _tcpSocket = null;
     _udpSocket?.close();
     _udpSocket = null;
-    
+
     if (_status != ConnectionStatus.disconnected) {
       _updateStatus(ConnectionStatus.disconnected);
     }
@@ -337,8 +343,12 @@ abstract class BaseConnection extends ChangeNotifier {
       debugPrint('[$runtimeType] 心跳包已发送 (#$_heartbeatCount)');
 
       if (_lastHeartbeatResponse != null) {
-        final elapsed = DateTime.now().difference(_lastHeartbeatResponse!).inSeconds;
-        if (elapsed > _config.heartbeatIntervalSeconds * _config.heartbeatTimeoutMultiplier) {
+        final elapsed = DateTime.now()
+            .difference(_lastHeartbeatResponse!)
+            .inSeconds;
+        if (elapsed >
+            _config.heartbeatIntervalSeconds *
+                _config.heartbeatTimeoutMultiplier) {
           debugPrint('[$runtimeType] 心跳超时');
           _handleDisconnection();
         }

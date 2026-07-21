@@ -61,8 +61,11 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       // 合并多个 Listenable，任一状态变化都会触发重建
-      listenable:
-          Listenable.merge([_matrixConnection, _matrixState, _nameManager]),
+      listenable: Listenable.merge([
+        _matrixConnection,
+        _matrixState,
+        _nameManager,
+      ]),
       builder: (context, child) {
         return SafeArea(
           // 安全区域，避免内容被系统状态栏遮挡
@@ -133,7 +136,9 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
           channelNumber: channelNumber,
           isHighlighted: isHighlighted,
           // 高亮颜色：输出通道使用配置的输出高亮色
-          highlightColor: isHighlighted ? DeviceConfig.colorHighlightOutput : null,
+          highlightColor: isHighlighted
+              ? DeviceConfig.colorHighlightOutput
+              : null,
           // 点击事件：触发输出通道绑定逻辑
           onTap: () => _onOutputChannelTapped(channelNumber),
           // 长按事件：弹出重命名对话框
@@ -220,7 +225,9 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
       decoration: BoxDecoration(
         // 背景色：状态色的低透明度版本
         color: statusColor.withAlpha(20),
-        borderRadius: BorderRadius.circular(DeviceConfig.statusChipBorderRadius),
+        borderRadius: BorderRadius.circular(
+          DeviceConfig.statusChipBorderRadius,
+        ),
         // 边框：状态色的中等透明度版本
         border: Border.all(color: statusColor.withAlpha(60), width: 1),
       ),
@@ -267,14 +274,20 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
         color: DeviceConfig.colorHighlightInput.withAlpha(25),
         borderRadius: BorderRadius.circular(DeviceConfig.bannerBorderRadius),
         // 边框：输入高亮色的中等透明度版本
-        border:
-            Border.all(color: DeviceConfig.colorHighlightInput.withAlpha(60), width: 1),
+        border: Border.all(
+          color: DeviceConfig.colorHighlightInput.withAlpha(60),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           // 信息图标
-          const Icon(Icons.info_outline, size: 16, color: DeviceConfig.colorAccent),
+          const Icon(
+            Icons.info_outline,
+            size: 16,
+            color: DeviceConfig.colorAccent,
+          ),
           SizedBox(width: ResponsiveUtils.getSpacing(context, 6)),
           // 操作指引文字，使用 Flexible 防止文字溢出
           const Flexible(
@@ -370,8 +383,7 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
           backgroundColor: DeviceConfig.colorSnackBarBg,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       );
       return;
@@ -388,17 +400,13 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
       // 十六进制格式：将输入输出编号转换为两位十六进制字符串
       command = _config.hexMatrixSwitchCmd
           .replaceAll(
-              '{input02X}',
-              selectedInput
-                  .toRadixString(16)
-                  .padLeft(2, '0')
-                  .toUpperCase())
+            '{input02X}',
+            selectedInput.toRadixString(16).padLeft(2, '0').toUpperCase(),
+          )
           .replaceAll(
-              '{output02X}',
-              channelNumber
-                  .toRadixString(16)
-                  .padLeft(2, '0')
-                  .toUpperCase());
+            '{output02X}',
+            channelNumber.toRadixString(16).padLeft(2, '0').toUpperCase(),
+          );
     } else {
       // ASCII 格式：直接替换占位符为十进制数字
       command = _config.matrixSwitchAsciiCmd
@@ -411,7 +419,8 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
     // 输出调试日志：仅在切换了不同输入源时记录
     if (previousInput != null && previousInput != selectedInput) {
       debugPrint(
-          '[矩阵控制] 输出$channelNumber 已从输入$previousInput 切换到输入$selectedInput');
+        '[矩阵控制] 输出$channelNumber 已从输入$previousInput 切换到输入$selectedInput',
+      );
     }
   }
 
@@ -424,8 +433,7 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
   /// - [typeName]：通道类型名称（'输入' 或 '输出'），用于对话框标题
   /// - [channelNumber]：通道编号
   /// - [isOutput]：是否为输出通道
-  void _showRenameDialog(
-      String typeName, int channelNumber, bool isOutput) {
+  void _showRenameDialog(String typeName, int channelNumber, bool isOutput) {
     showRenameDialog(
       context,
       typeName: typeName,

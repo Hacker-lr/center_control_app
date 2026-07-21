@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/device_config.dart';
 import '../services/device_config.dart';
 
 /// ============================================================
@@ -8,26 +10,60 @@ import '../services/device_config.dart';
 /// 支持自定义长按触发改名对话框（时长由 DeviceConfig 控制）
 /// 文字使用FittedBox自适应缩放，确保完全显示
 /// 所有颜色与交互参数取自 DeviceConfig 全局配置
+/// 支持自定义长按触发改名对话框（时长由 DeviceConfig 控制）
+/// 文字使用FittedBox自适应缩放，确保完全显示
+/// 所有颜色与交互参数取自 DeviceConfig 全局配置
 /// ============================================================
+class ChannelButton extends StatefulWidget {
+  /// 按钮显示的标签文字
 class ChannelButton extends StatefulWidget {
   /// 按钮显示的标签文字
   final String label;
 
   /// 通道类型标识（如 'input' / 'output'）
+
+  /// 通道类型标识（如 'input' / 'output'）
   final String channelType;
+
+  /// 通道编号（1-based）
 
   /// 通道编号（1-based）
   final int channelNumber;
 
   /// 是否高亮显示（选中状态）
+
+  /// 是否高亮显示（选中状态）
   final bool isHighlighted;
+
+  /// 高亮颜色，可选；若为空则使用 DeviceConfig.colorHighlightInput
 
   /// 高亮颜色，可选；若为空则使用 DeviceConfig.colorHighlightInput
   final Color? highlightColor;
 
   /// 点击回调函数
+
+  /// 点击回调函数
   final VoidCallback onTap;
 
+  /// 长按回调函数，可选；若为空则禁用长按功能
+  final VoidCallback? onLongPress;
+
+  /// 按钮固定宽度，由父组件根据可用空间计算传入
+  final double width;
+
+  /// 按钮固定高度，由父组件根据可用空间计算传入
+  final double height;
+
+  /// 构造函数
+  /// [label] 按钮标签文字，必填
+  /// [channelType] 通道类型标识，必填
+  /// [channelNumber] 通道编号（1-based），必填
+  /// [isHighlighted] 是否高亮，必填
+  /// [highlightColor] 高亮颜色，可选
+  /// [onTap] 点击回调，必填
+  /// [onLongPress] 长按回调，可选
+  /// [width] 按钮宽度，必填
+  /// [height] 按钮高度，必填
   /// 长按回调函数，可选；若为空则禁用长按功能
   final VoidCallback? onLongPress;
 
@@ -166,7 +202,12 @@ class _ChannelButtonState extends State<ChannelButton> {
         widget.width * DeviceConfig.buttonShadowBlurSmallRatio;
 
     // 手势检测器 - 监听按下、抬起、取消事件
+    // 手势检测器 - 监听按下、抬起、取消事件
     return GestureDetector(
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      // 动画容器 - 状态变化时平滑过渡
       onTapDown: _onTapDown,
       onTapUp: _onTapUp,
       onTapCancel: _onTapCancel,
@@ -177,11 +218,18 @@ class _ChannelButtonState extends State<ChannelButton> {
         curve: Curves.easeInOut,
         width: widget.width,
         height: widget.height,
+        width: widget.width,
+        height: widget.height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(borderRadius),
           // 背景色：高亮状态使用半透明激活色，普通状态使用按钮背景色
           color: widget.isHighlighted
+          // 背景色：高亮状态使用半透明激活色，普通状态使用按钮背景色
+          color: widget.isHighlighted
               ? activeColor.withAlpha(230)
+              : DeviceConfig.colorButtonBg,
+          // 阴影：高亮状态使用大阴影，普通状态使用小阴影
+          boxShadow: widget.isHighlighted
               : DeviceConfig.colorButtonBg,
           // 阴影：高亮状态使用大阴影，普通状态使用小阴影
           boxShadow: widget.isHighlighted
@@ -199,6 +247,7 @@ class _ChannelButtonState extends State<ChannelButton> {
                     offset: const Offset(0, 3),
                   ),
                 ],
+          // 边框：按下状态使用按压色，高亮状态使用激活色，普通状态使用边框色
           // 边框：按下状态使用按压色，高亮状态使用激活色，普通状态使用边框色
           border: Border.all(
             color: _isPressing

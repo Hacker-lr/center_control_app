@@ -27,11 +27,15 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
   final TextEditingController _powerPortController = TextEditingController();
   final TextEditingController _matrixIpController = TextEditingController();
   final TextEditingController _matrixPortController = TextEditingController();
-  final TextEditingController _matrixInputCountController = TextEditingController();
-  final TextEditingController _matrixOutputCountController = TextEditingController();
+  final TextEditingController _matrixInputCountController =
+      TextEditingController();
+  final TextEditingController _matrixOutputCountController =
+      TextEditingController();
   final TextEditingController _bigScreenIpController = TextEditingController();
-  final TextEditingController _bigScreenPortController = TextEditingController();
-  final TextEditingController _cameraPresetCountController = TextEditingController();
+  final TextEditingController _bigScreenPortController =
+      TextEditingController();
+  final TextEditingController _cameraPresetCountController =
+      TextEditingController();
 
   /// 摄像头配置控制器列表
   final List<Map<String, TextEditingController>> _cameraControllers = [];
@@ -126,23 +130,35 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
   /// 保存所有配置
   void _saveAll() {
     _config.setPowerDeviceIp(_powerIpController.text.trim());
-    _config.setPowerDevicePort(int.tryParse(_powerPortController.text.trim()) ?? 5000);
+    _config.setPowerDevicePort(
+      int.tryParse(_powerPortController.text.trim()) ?? 5000,
+    );
     _config.setPowerUseTcp(_powerUseTcp);
     _config.setPowerSendAsHex(_powerSendAsHex);
     _config.setPowerBrand(_powerBrand);
     _config.setMatrixDeviceIp(_matrixIpController.text.trim());
-    _config.setMatrixDevicePort(int.tryParse(_matrixPortController.text.trim()) ?? 5000);
+    _config.setMatrixDevicePort(
+      int.tryParse(_matrixPortController.text.trim()) ?? 5000,
+    );
     _config.setMatrixUseTcp(_matrixUseTcp);
     _config.setMatrixSendAsHex(_matrixSendAsHex);
     _config.setMatrixBrand(_matrixBrand);
-    _config.setMatrixInputCount(int.tryParse(_matrixInputCountController.text.trim()) ?? 16);
-    _config.setMatrixOutputCount(int.tryParse(_matrixOutputCountController.text.trim()) ?? 16);
+    _config.setMatrixInputCount(
+      int.tryParse(_matrixInputCountController.text.trim()) ?? 16,
+    );
+    _config.setMatrixOutputCount(
+      int.tryParse(_matrixOutputCountController.text.trim()) ?? 16,
+    );
     _config.setBigScreenDeviceIp(_bigScreenIpController.text.trim());
-    _config.setBigScreenDevicePort(int.tryParse(_bigScreenPortController.text.trim()) ?? 5000);
+    _config.setBigScreenDevicePort(
+      int.tryParse(_bigScreenPortController.text.trim()) ?? 5000,
+    );
     _config.setBigScreenUseTcp(_bigScreenUseTcp);
     _config.setBigScreenSendAsHex(_bigScreenSendAsHex);
     _config.setBigScreenBrand(_bigScreenBrand);
-    _config.setCameraPresetCount(int.tryParse(_cameraPresetCountController.text.trim()) ?? 8);
+    _config.setCameraPresetCount(
+      int.tryParse(_cameraPresetCountController.text.trim()) ?? 8,
+    );
     _config.setShowPowerControl(_showPowerControl);
     _config.setShowBigScreen(_showBigScreen);
     _config.setShowVideoMatrix(_showVideoMatrix);
@@ -172,7 +188,9 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
   void _addCamera() {
     setState(() {
       _cameraControllers.add({
-        'ip': TextEditingController(text: '192.168.0.${64 + _cameraControllers.length}'),
+        'ip': TextEditingController(
+          text: '192.168.0.${64 + _cameraControllers.length}',
+        ),
         'port': TextEditingController(text: '52381'),
         'viscaAddr': TextEditingController(text: '1'),
       });
@@ -220,7 +238,13 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 children: [
                   Icon(icon, size: 20, color: DeviceConfig.colorAccent),
                   const SizedBox(width: 12),
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const Spacer(),
                   Icon(
                     isExpanded ? Icons.expand_less : Icons.expand_more,
@@ -234,10 +258,12 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
             duration: const Duration(milliseconds: 250),
             firstChild: const SizedBox.shrink(),
             secondChild: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0,),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
               child: Column(children: children),
             ),
-            crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            crossFadeState: isExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
           ),
         ],
       ),
@@ -269,13 +295,20 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
             child: TextField(
               controller: controller,
               maxLength: maxLength,
-              keyboardType: keyboardType ?? (isNumber ? TextInputType.number : TextInputType.text),
-              inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly] : null,
+              keyboardType:
+                  keyboardType ??
+                  (isNumber ? TextInputType.number : TextInputType.text),
+              inputFormatters: isNumber
+                  ? [FilteringTextInputFormatter.digitsOnly]
+                  : null,
               decoration: InputDecoration(
                 hintText: hintText,
                 hintStyle: const TextStyle(color: _hintColor, fontSize: 13),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 counterText: '',
               ),
               style: const TextStyle(fontSize: 14),
@@ -306,18 +339,26 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: DeviceConfig.colorDialogFieldBg,
-                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), bottomLeft: Radius.circular(8)),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
+                      bottomLeft: Radius.circular(8),
+                    ),
                     border: Border.all(color: DeviceConfig.colorButtonBorder),
                   ),
                   child: TextField(
                     controller: ipController,
                     maxLength: 15,
-                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       hintText: 'IP地址',
                       hintStyle: TextStyle(color: _hintColor, fontSize: 13),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       counterText: '',
                     ),
                     style: const TextStyle(fontSize: 14),
@@ -334,7 +375,10 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: DeviceConfig.colorDialogFieldBg,
-                    borderRadius: const BorderRadius.only(topRight: Radius.circular(8), bottomRight: Radius.circular(8)),
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(8),
+                      bottomRight: Radius.circular(8),
+                    ),
                     border: Border.all(color: DeviceConfig.colorButtonBorder),
                   ),
                   child: TextField(
@@ -346,7 +390,10 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                       hintText: '端口',
                       hintStyle: TextStyle(color: _hintColor, fontSize: 13),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       counterText: '',
                     ),
                     style: const TextStyle(fontSize: 14),
@@ -384,15 +431,30 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Center(
-                  child: Text('${index + 1}', style: TextStyle(color: DeviceConfig.colorAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    '${index + 1}',
+                    style: TextStyle(
+                      color: DeviceConfig.colorAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              Text('摄像头 ${index + 1}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              Text(
+                '摄像头 ${index + 1}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: _cameraControllers.length > 1 ? () => _removeCamera(index) : null,
+                onPressed: _cameraControllers.length > 1
+                    ? () => _removeCamera(index)
+                    : null,
                 disabledColor: _hintColor,
               ),
             ],
@@ -405,31 +467,46 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.black12,
-                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(6), bottomLeft: Radius.circular(6)),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(6),
+                      bottomLeft: Radius.circular(6),
+                    ),
                     border: Border.all(color: DeviceConfig.colorButtonBorder),
                   ),
                   child: TextField(
                     controller: ctrl['ip'],
                     maxLength: 15,
-                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       hintText: 'IP',
                       hintStyle: TextStyle(color: _hintColor, fontSize: 12),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       counterText: '',
                     ),
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
               ),
-              Container(width: 1, height: 36, color: DeviceConfig.colorButtonBorder),
+              Container(
+                width: 1,
+                height: 36,
+                color: DeviceConfig.colorButtonBorder,
+              ),
               Expanded(
                 flex: 1,
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.black12,
-                    borderRadius: const BorderRadius.only(topRight: Radius.circular(6), bottomRight: Radius.circular(6)),
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(6),
+                      bottomRight: Radius.circular(6),
+                    ),
                     border: Border.all(color: DeviceConfig.colorButtonBorder),
                   ),
                   child: TextField(
@@ -441,7 +518,10 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                       hintText: '端口',
                       hintStyle: TextStyle(color: _hintColor, fontSize: 12),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       counterText: '',
                     ),
                     style: const TextStyle(fontSize: 13),
@@ -462,7 +542,10 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('矩阵通道数量', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          const Text(
+            '矩阵通道数量',
+            style: TextStyle(fontSize: 13, color: Colors.grey),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -470,7 +553,10 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: DeviceConfig.colorDialogFieldBg,
-                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), bottomLeft: Radius.circular(8)),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
+                      bottomLeft: Radius.circular(8),
+                    ),
                     border: Border.all(color: DeviceConfig.colorButtonBorder),
                   ),
                   child: TextField(
@@ -482,19 +568,29 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                       hintText: '输入通道数',
                       hintStyle: TextStyle(color: _hintColor, fontSize: 13),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       counterText: '',
                     ),
                     style: const TextStyle(fontSize: 14),
                   ),
                 ),
               ),
-              Container(width: 1, height: 42, color: DeviceConfig.colorButtonBorder),
+              Container(
+                width: 1,
+                height: 42,
+                color: DeviceConfig.colorButtonBorder,
+              ),
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
                     color: DeviceConfig.colorDialogFieldBg,
-                    borderRadius: const BorderRadius.only(topRight: Radius.circular(8), bottomRight: Radius.circular(8)),
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(8),
+                      bottomRight: Radius.circular(8),
+                    ),
                     border: Border.all(color: DeviceConfig.colorButtonBorder),
                   ),
                   child: TextField(
@@ -506,7 +602,10 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                       hintText: '输出通道数',
                       hintStyle: TextStyle(color: _hintColor, fontSize: 13),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       counterText: '',
                     ),
                     style: const TextStyle(fontSize: 14),
@@ -541,7 +640,11 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
             child: Row(
               children: [
                 _buildProtocolOption('TCP', true, value, onChanged),
-                Container(width: 1, height: 32, color: DeviceConfig.colorButtonBorder),
+                Container(
+                  width: 1,
+                  height: 32,
+                  color: DeviceConfig.colorButtonBorder,
+                ),
                 _buildProtocolOption('UDP', false, value, onChanged),
               ],
             ),
@@ -590,7 +693,11 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                   }
                 },
                 style: const TextStyle(color: Colors.white, fontSize: 13),
-                icon: Icon(Icons.arrow_drop_down, color: Colors.grey[400], size: 20),
+                icon: Icon(
+                  Icons.arrow_drop_down,
+                  color: Colors.grey[400],
+                  size: 20,
+                ),
                 dropdownColor: DeviceConfig.colorCardBg,
               ),
             ),
@@ -612,16 +719,26 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: currentValue == isTcp ? DeviceConfig.colorAccent : Colors.transparent,
+          color: currentValue == isTcp
+              ? DeviceConfig.colorAccent
+              : Colors.transparent,
           borderRadius: isTcp
-              ? const BorderRadius.only(topLeft: Radius.circular(8), bottomLeft: Radius.circular(8))
-              : const BorderRadius.only(topRight: Radius.circular(8), bottomRight: Radius.circular(8)),
+              ? const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  bottomLeft: Radius.circular(8),
+                )
+              : const BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                ),
         ),
         child: Text(
           text,
           style: TextStyle(
             fontSize: 13,
-            fontWeight: currentValue == isTcp ? FontWeight.bold : FontWeight.normal,
+            fontWeight: currentValue == isTcp
+                ? FontWeight.bold
+                : FontWeight.normal,
             color: currentValue == isTcp ? Colors.white : Colors.grey[400],
           ),
         ),
@@ -645,9 +762,19 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(
+                  subtitle,
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
               ],
             ),
           ),
@@ -666,7 +793,10 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
     return Scaffold(
       backgroundColor: DeviceConfig.colorCardBg,
       appBar: AppBar(
-        title: const Text('系统配置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        title: const Text(
+          '系统配置',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: DeviceConfig.colorCardBg,
         elevation: 0,
         centerTitle: true,
@@ -692,11 +822,15 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 _buildBrandDropdown(
                   label: '设备品牌',
                   currentValue: _matrixBrand,
-                  brandNames: DeviceConfig.matrixBrandConfigs.map((b) => b.name).toList(),
+                  brandNames: DeviceConfig.matrixBrandConfigs
+                      .map((b) => b.name)
+                      .toList(),
                   onChanged: (value) {
                     setState(() {
                       _matrixBrand = value;
-                      final config = DeviceConfig.matrixBrandConfigs.firstWhere((b) => b.name == value);
+                      final config = DeviceConfig.matrixBrandConfigs.firstWhere(
+                        (b) => b.name == value,
+                      );
                       // 切换品牌时自动应用该品牌的端口、协议、发送模式
                       _matrixPortController.text = '${config.port}';
                       _matrixUseTcp = config.useTcp;
@@ -725,11 +859,14 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 _buildBrandDropdown(
                   label: '设备品牌',
                   currentValue: _bigScreenBrand,
-                  brandNames: DeviceConfig.bigScreenBrandConfigs.map((b) => b.name).toList(),
+                  brandNames: DeviceConfig.bigScreenBrandConfigs
+                      .map((b) => b.name)
+                      .toList(),
                   onChanged: (value) {
                     setState(() {
                       _bigScreenBrand = value;
-                      final config = DeviceConfig.bigScreenBrandConfigs.firstWhere((b) => b.name == value);
+                      final config = DeviceConfig.bigScreenBrandConfigs
+                          .firstWhere((b) => b.name == value);
                       // 切换品牌时自动应用该品牌的端口、协议、发送模式
                       _bigScreenPortController.text = '${config.port}';
                       _bigScreenUseTcp = config.useTcp;
@@ -740,7 +877,8 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 _buildProtocolSwitch(
                   label: '通信协议',
                   value: _bigScreenUseTcp,
-                  onChanged: (value) => setState(() => _bigScreenUseTcp = value),
+                  onChanged: (value) =>
+                      setState(() => _bigScreenUseTcp = value),
                 ),
               ],
             ),
@@ -757,11 +895,15 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 _buildBrandDropdown(
                   label: '设备品牌',
                   currentValue: _powerBrand,
-                  brandNames: DeviceConfig.powerBrandConfigs.map((b) => b.name).toList(),
+                  brandNames: DeviceConfig.powerBrandConfigs
+                      .map((b) => b.name)
+                      .toList(),
                   onChanged: (value) {
                     setState(() {
                       _powerBrand = value;
-                      final config = DeviceConfig.powerBrandConfigs.firstWhere((b) => b.name == value);
+                      final config = DeviceConfig.powerBrandConfigs.firstWhere(
+                        (b) => b.name == value,
+                      );
                       // 切换品牌时自动应用该品牌的端口、协议、发送模式
                       _powerPortController.text = '${config.port}';
                       _powerUseTcp = config.useTcp;
@@ -781,7 +923,9 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
               icon: Icons.videocam,
               groupKey: 'camera',
               children: [
-                ..._cameraControllers.asMap().entries.map((entry) => _buildCameraItem(entry.key)),
+                ..._cameraControllers.asMap().entries.map(
+                  (entry) => _buildCameraItem(entry.key),
+                ),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
@@ -789,9 +933,14 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                     onPressed: _addCamera,
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: DeviceConfig.colorAccent),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
-                    child: Text('添加摄像头', style: TextStyle(color: DeviceConfig.colorAccent)),
+                    child: Text(
+                      '添加摄像头',
+                      style: TextStyle(color: DeviceConfig.colorAccent),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -820,7 +969,8 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                   title: '时序电源控制',
                   subtitle: '显示电源开/关控制页面',
                   value: _showPowerControl,
-                  onChanged: (value) => setState(() => _showPowerControl = value),
+                  onChanged: (value) =>
+                      setState(() => _showPowerControl = value),
                 ),
                 _buildPageVisibilitySwitch(
                   title: '大屏控制',
@@ -832,13 +982,15 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                   title: '视频矩阵控制',
                   subtitle: '显示视频矩阵输入/输出切换页面',
                   value: _showVideoMatrix,
-                  onChanged: (value) => setState(() => _showVideoMatrix = value),
+                  onChanged: (value) =>
+                      setState(() => _showVideoMatrix = value),
                 ),
                 _buildPageVisibilitySwitch(
                   title: '摄像头控制',
                   subtitle: '显示摄像头云台控制与预置位管理页面',
                   value: _showCameraControl,
-                  onChanged: (value) => setState(() => _showCameraControl = value),
+                  onChanged: (value) =>
+                      setState(() => _showCameraControl = value),
                 ),
               ],
             ),
@@ -850,10 +1002,15 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 onPressed: _saveAll,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: DeviceConfig.colorAccent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   elevation: 4,
                 ),
-                child: const Text('保存配置', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  '保存配置',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -869,7 +1026,10 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                       title: const Text('确认重置'),
                       content: const Text('确定要重置所有配置为默认值吗？'),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('取消'),
+                        ),
                         TextButton(
                           onPressed: () {
                             _config.resetAll();
@@ -887,9 +1047,14 @@ class _DebugConfigPageState extends State<DebugConfigPage> {
                 },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.red),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: const Text('重置为默认值', style: TextStyle(color: Colors.red)),
+                child: const Text(
+                  '重置为默认值',
+                  style: TextStyle(color: Colors.red),
+                ),
               ),
             ),
             const SizedBox(height: 20),
