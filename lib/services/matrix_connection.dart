@@ -10,14 +10,20 @@ class MatrixConnection extends BaseConnection {
   factory MatrixConnection() => _instance;
   MatrixConnection._internal();
 
-  @override
-  String get deviceIp => DeviceConfig.matrixDeviceIp;
+  /// 配置实例
+  final DeviceConfig _config = DeviceConfig();
 
   @override
-  int get devicePort => DeviceConfig.matrixDevicePort;
+  String get deviceIp => _config.matrixDeviceIp;
 
   @override
-  bool get sendAsHex => DeviceConfig.matrixSendAsHex;
+  int get devicePort => _config.matrixDevicePort;
+
+  @override
+  bool get useTcp => _config.matrixUseTcp;
+
+  @override
+  bool get sendAsHex => _config.matrixSendAsHex;
 
   @override
   String get heartbeatCommand => 'HEARTBEAT\r\n';
