@@ -119,9 +119,11 @@ class _BigScreenPageState extends State<BigScreenPage> {
                 children: [
                   /// 顶部间距
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 4)),
+
                   /// 区域1：连接状态指示器（拼接器和矩阵）
                   _buildConnectionStatusIndicator(),
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 4)),
+
                   /// 区域2：分屏预览（占3份高度），可展开
                   Expanded(
                     flex: 3,
@@ -132,15 +134,15 @@ class _BigScreenPageState extends State<BigScreenPage> {
                     ),
                   ),
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 4)),
+
                   /// 区域3：分屏模式选择按钮
-                  SectionCard(
-                    label: '分屏模式',
-                    child: _buildLayoutButtonsRow(),
-                  ),
+                  SectionCard(label: '分屏模式', child: _buildLayoutButtonsRow()),
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 4)),
+
                   /// 区域4：操作提示横幅
                   _buildInstructionBanner(),
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 4)),
+
                   /// 区域5：输入通道按钮网格（占5份高度），可展开
                   Expanded(
                     flex: 5,
@@ -151,6 +153,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
                     ),
                   ),
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 4)),
+
                   /// 区域6：底部操作提示文字
                   _buildOperationHintText(),
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 6)),
@@ -174,6 +177,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
         /// 拼接器连接状态芯片
         _buildSingleStatusChip('拼接器', _bigScreenConnection.status),
         SizedBox(width: ResponsiveUtils.getSpacing(context, 10)),
+
         /// 矩阵连接状态芯片
         _buildSingleStatusChip('矩阵', _matrixConnection.status),
       ],
@@ -224,7 +228,9 @@ class _BigScreenPageState extends State<BigScreenPage> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: statusColor.withAlpha(20),
-        borderRadius: BorderRadius.circular(DeviceConfig.statusChipBorderRadius),
+        borderRadius: BorderRadius.circular(
+          DeviceConfig.statusChipBorderRadius,
+        ),
         border: Border.all(color: statusColor.withAlpha(60), width: 1),
       ),
       child: Row(
@@ -276,7 +282,11 @@ class _BigScreenPageState extends State<BigScreenPage> {
 
               /// 计算当前区域在预览区域中的位置和大小
               final Rect rect = _calculateAreaRect(
-                  areaIndex, areaCount, constraints.maxWidth, constraints.maxHeight);
+                areaIndex,
+                areaCount,
+                constraints.maxWidth,
+                constraints.maxHeight,
+              );
 
               /// 获取该输出通道已绑定的输入通道号
               final int? boundInput = _matrixState.getBoundInput(outputChannel);
@@ -287,7 +297,8 @@ class _BigScreenPageState extends State<BigScreenPage> {
               /// 判断当前区域是否需要高亮显示：
               /// 1. 区域被直接选中（_selectedAreaIndex == areaIndex）
               /// 2. 当前选中的输入已绑定到该区域（boundInput == selectedInput）
-              final bool isHighlighted = (_selectedAreaIndex == areaIndex) ||
+              final bool isHighlighted =
+                  (_selectedAreaIndex == areaIndex) ||
                   (selectedInput > 0 && boundInput == selectedInput);
 
               /// 使用 Positioned 定位每个分屏区域
@@ -300,14 +311,18 @@ class _BigScreenPageState extends State<BigScreenPage> {
                   /// 点击分屏区域时触发绑定操作
                   onTap: () => _onSplitAreaTapped(areaIndex, outputChannel),
                   child: AnimatedContainer(
-                    duration: Duration(milliseconds: DeviceConfig.animationDurationMs),
+                    duration: Duration(
+                      milliseconds: DeviceConfig.animationDurationMs,
+                    ),
                     margin: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
                       /// 高亮时使用高亮背景色，否则使用默认背景色
                       color: isHighlighted
                           ? DeviceConfig.colorHighlightOutput.withAlpha(220)
                           : DeviceConfig.colorSplitAreaBg,
-                      borderRadius: BorderRadius.circular(DeviceConfig.cardBorderRadius),
+                      borderRadius: BorderRadius.circular(
+                        DeviceConfig.cardBorderRadius,
+                      ),
                       border: Border.all(
                         /// 高亮时使用强调色边框，否则使用默认边框色
                         color: isHighlighted
@@ -315,13 +330,14 @@ class _BigScreenPageState extends State<BigScreenPage> {
                             : DeviceConfig.colorSplitAreaBorder,
                         width: isHighlighted ? 2 : 1,
                       ),
+
                       /// 高亮时添加阴影效果，增强视觉反馈
                       boxShadow: isHighlighted
                           ? [
                               BoxShadow(
                                 color: const Color(0xFF3E6B48).withAlpha(80),
                                 blurRadius: 6,
-                              )
+                              ),
                             ]
                           : null,
                     ),
@@ -349,7 +365,11 @@ class _BigScreenPageState extends State<BigScreenPage> {
   ///
   /// 返回值：Rect 对象，表示区域的左上角坐标和宽高
   Rect _calculateAreaRect(
-      int areaIndex, int areaCount, double totalW, double totalH) {
+    int areaIndex,
+    int areaCount,
+    double totalW,
+    double totalH,
+  ) {
     /// 分屏区域之间的间距，从配置中读取
     const double gap = DeviceConfig.splitAreaGap;
 
@@ -364,8 +384,10 @@ class _BigScreenPageState extends State<BigScreenPage> {
       /// 两个区域水平排列，各占一半宽度，中间有一个间距
       /// 布局示意图：[ 区域0 | 区域1 ]
       case 2:
+
         /// 每个区域的宽度 = (总宽度 - 1个间距) / 2
         final double w = (totalW - gap) / 2;
+
         /// 区域0从x=0开始，区域1从x=w+gap开始，高度均为全屏高度
         return Rect.fromLTWH(areaIndex * (w + gap), 0, w, totalH);
 
@@ -373,8 +395,10 @@ class _BigScreenPageState extends State<BigScreenPage> {
       /// 三个区域水平排列，各占三分之一宽度，中间有两个间距
       /// 布局示意图：[ 区域0 | 区域1 | 区域2 ]
       case 3:
+
         /// 每个区域的宽度 = (总宽度 - 2个间距) / 3
         final double w = (totalW - gap * 2) / 3;
+
         /// 区域0从x=0开始，区域1从x=w+gap开始，区域2从x=2*(w+gap)开始
         return Rect.fromLTWH(areaIndex * (w + gap), 0, w, totalH);
 
@@ -384,15 +408,22 @@ class _BigScreenPageState extends State<BigScreenPage> {
       /// [ 区域0 | 区域1 ]
       /// [ 区域2 | 区域3 ]
       case 4:
+
         /// 每个区域的宽度 = (总宽度 - 1个间距) / 2
         final double w = (totalW - gap) / 2;
+
         /// 每个区域的高度 = (总高度 - 1个间距) / 2
         final double h = (totalH - gap) / 2;
+
         /// 使用取模运算确定列位置（0或1），使用整除运算确定行位置（0或1）
         /// x = (areaIndex % 2) * (w + gap)
         /// y = (areaIndex ~/ 2) * (h + gap)
         return Rect.fromLTWH(
-            (areaIndex % 2) * (w + gap), (areaIndex ~/ 2) * (h + gap), w, h);
+          (areaIndex % 2) * (w + gap),
+          (areaIndex ~/ 2) * (h + gap),
+          w,
+          h,
+        );
 
       /// ============ 五分屏模式（5个区域） ============
       /// 特殊的"品"字形布局：中间一个大区域，左右各两个小区域
@@ -401,10 +432,13 @@ class _BigScreenPageState extends State<BigScreenPage> {
       /// [ 区域2 ] [      ] [ 区域4 ]
       /// 其中区域0占据中间全部高度，区域1/2占据左侧上下两部分，区域3/4占据右侧上下两部分
       case 5:
+
         /// 左右两侧区域宽度 = 总宽度 * 20%
         final double sideW = totalW * 0.2;
+
         /// 中间区域宽度 = 总宽度 - 左侧宽度 - 右侧宽度 - 2个间距
         final double centerW = totalW - sideW * 2 - gap * 2;
+
         /// 左右区域的高度 = (总高度 - 1个间距) / 2（上下各一半）
         final double halfH = (totalH - gap) / 2;
 
@@ -425,7 +459,11 @@ class _BigScreenPageState extends State<BigScreenPage> {
             return Rect.fromLTWH(centerW + sideW + gap * 2, 0, sideW, halfH);
           default: // 右下角区域（areaIndex=4）
             return Rect.fromLTWH(
-                centerW + sideW + gap * 2, halfH + gap, sideW, halfH);
+              centerW + sideW + gap * 2,
+              halfH + gap,
+              sideW,
+              halfH,
+            );
         }
 
       /// 默认情况：返回全屏区域
@@ -448,19 +486,24 @@ class _BigScreenPageState extends State<BigScreenPage> {
         scrollDirection: Axis.horizontal,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+
           /// 根据配置的分屏模式数量生成对应的按钮
           children: List.generate(_layoutButtonEntries.length, (index) {
             final entry = _layoutButtonEntries[index];
             return Padding(
               padding: EdgeInsets.symmetric(
-                  horizontal: ResponsiveUtils.getSpacing(context, 5)),
+                horizontal: ResponsiveUtils.getSpacing(context, 5),
+              ),
               child: _buildLayoutButton(
-                  /// 按钮显示文本（如"全屏"、"二分屏"等）
-                  entry.value,
-                  /// 是否为当前选中的模式
-                  _currentLayoutIndex == index,
-                  /// 点击回调，传递按钮索引和布局键值
-                  () => _onLayoutButtonTapped(index, entry.key)),
+                /// 按钮显示文本（如"全屏"、"二分屏"等）
+                entry.value,
+
+                /// 是否为当前选中的模式
+                _currentLayoutIndex == index,
+
+                /// 点击回调，传递按钮索引和布局键值
+                () => _onLayoutButtonTapped(index, entry.key),
+              ),
             );
           }),
         ),
@@ -476,8 +519,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
   /// - [label]：按钮显示文本（如"全屏"、"二分屏"等）
   /// - [isSelected]：是否为当前选中状态
   /// - [onTap]：点击回调函数
-  Widget _buildLayoutButton(
-      String label, bool isSelected, VoidCallback onTap) {
+  Widget _buildLayoutButton(String label, bool isSelected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -498,16 +540,18 @@ class _BigScreenPageState extends State<BigScreenPage> {
             color: isSelected
                 ? DeviceConfig.colorAccent
                 : DeviceConfig.colorButtonBorder,
+
             /// 选中时边框更粗（2px），未选中时较细（1px）
             width: isSelected ? 2 : 1,
           ),
+
           /// 选中时添加阴影效果，增强视觉层次感
           boxShadow: isSelected
               ? [
                   BoxShadow(
                     color: DeviceConfig.colorHighlightInput.withAlpha(60),
                     blurRadius: 6,
-                  )
+                  ),
                 ]
               : null,
         ),
@@ -516,6 +560,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
           style: TextStyle(
             fontSize: ResponsiveUtils.getFontSize(context, 12),
             fontWeight: FontWeight.w600,
+
             /// 选中时文字为白色，未选中时为灰色
             color: isSelected ? Colors.white : Colors.grey[500],
           ),
@@ -536,6 +581,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
     return ChannelButtonGrid(
       /// 输入通道总数，从设备配置中读取
       totalCount: _inputCount,
+
       /// 按钮构建器，为每个通道生成对应的 ChannelButton
       buttonBuilder: (channelNumber, width, height) {
         /// 判断当前通道是否为选中状态
@@ -546,13 +592,16 @@ class _BigScreenPageState extends State<BigScreenPage> {
           label: _nameManager.getInputName(channelNumber),
           channelType: '输入',
           channelNumber: channelNumber,
+
           /// 选中状态高亮显示
           isHighlighted: isSelected,
+
           /// 选中时使用深蓝色高亮
-          highlightColor:
-              isSelected ? const Color(0xFF1F4068) : null,
+          highlightColor: isSelected ? const Color(0xFF1F4068) : null,
+
           /// 单击事件：选中该输入通道
           onTap: () => _onInputChannelTapped(channelNumber),
+
           /// 长按事件：弹出重命名对话框
           onLongPress: () => _showRenameDialog('输入', channelNumber, false),
           width: width,
@@ -576,15 +625,22 @@ class _BigScreenPageState extends State<BigScreenPage> {
         /// 使用半透明高亮色作为背景
         color: DeviceConfig.colorHighlightInput.withAlpha(25),
         borderRadius: BorderRadius.circular(DeviceConfig.bannerBorderRadius),
-        border:
-            Border.all(color: DeviceConfig.colorHighlightInput.withAlpha(60), width: 1),
+        border: Border.all(
+          color: DeviceConfig.colorHighlightInput.withAlpha(60),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           /// 信息图标，强调这是提示内容
-          const Icon(Icons.info_outline, size: 16, color: DeviceConfig.colorAccent),
+          const Icon(
+            Icons.info_outline,
+            size: 16,
+            color: DeviceConfig.colorAccent,
+          ),
           SizedBox(width: ResponsiveUtils.getSpacing(context, 6)),
+
           /// 提示文本，使用 Flexible 确保文本过长时能自动换行
           const Flexible(
             child: Text(
@@ -620,6 +676,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
     } else {
       /// 获取当前选中输入已绑定的所有输出通道
       final outputs = _matrixState.getOutputsForInput(selectedInput);
+
       /// 状态2或3：根据是否有绑定输出显示不同提示
       hintText = outputs.isEmpty
           ? '已选中：输入 $selectedInput — 请点击上方分屏区域绑定'
@@ -631,6 +688,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
       duration: Duration(milliseconds: DeviceConfig.hintAnimationDurationMs),
       child: Text(
         hintText,
+
         /// 使用提示文本作为 key，确保内容变化时触发动画
         key: ValueKey(hintText),
         textAlign: TextAlign.center,
@@ -671,8 +729,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
             layoutCode.toRadixString(16).padLeft(2, '0').toUpperCase(),
           )
         /// ASCII模式：直接使用十进制数字
-        : _config.bigScreenLayoutAsciiCmd
-            .replaceAll('{layout}', '$layoutCode');
+        : _config.bigScreenLayoutAsciiCmd.replaceAll('{layout}', '$layoutCode');
 
     /// 发送分屏命令给拼接器
     _bigScreenConnection.sendCommand(command);
@@ -690,8 +747,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
   void _onSplitAreaTapped(int areaIndex, int outputChannel) {
     /// 切换区域选中状态：如果已选中则取消，否则选中该区域
     setState(() {
-      _selectedAreaIndex =
-          _selectedAreaIndex == areaIndex ? -1 : areaIndex;
+      _selectedAreaIndex = _selectedAreaIndex == areaIndex ? -1 : areaIndex;
     });
 
     /// 如果当前已选中输入通道（selectedInputIndex > 0），则执行绑定
@@ -710,6 +766,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
   void _bindInputToOutput(int outputChannel) {
     /// 获取当前选中的输入通道号
     final int selectedInput = _matrixState.selectedInputIndex;
+
     /// 安全检查：如果未选中输入通道，则直接返回
     if (selectedInput == 0) return;
 
@@ -720,22 +777,18 @@ class _BigScreenPageState extends State<BigScreenPage> {
     final String command = _config.matrixSendAsHex
         /// 十六进制模式：将输入和输出通道号转换为两位十六进制字符串
         ? _config.hexMatrixSwitchCmd
-            .replaceAll(
+              .replaceAll(
                 '{input02X}',
-                selectedInput
-                    .toRadixString(16)
-                    .padLeft(2, '0')
-                    .toUpperCase())
-            .replaceAll(
+                selectedInput.toRadixString(16).padLeft(2, '0').toUpperCase(),
+              )
+              .replaceAll(
                 '{output02X}',
-                outputChannel
-                    .toRadixString(16)
-                    .padLeft(2, '0')
-                    .toUpperCase())
+                outputChannel.toRadixString(16).padLeft(2, '0').toUpperCase(),
+              )
         /// ASCII模式：直接使用十进制数字
         : _config.matrixSwitchAsciiCmd
-            .replaceAll('{input}', '$selectedInput')
-            .replaceAll('{output}', '$outputChannel');
+              .replaceAll('{input}', '$selectedInput')
+              .replaceAll('{output}', '$outputChannel');
 
     /// 发送矩阵切换命令给矩阵设备
     _matrixConnection.sendCommand(command);
@@ -752,6 +805,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
   void _onInputChannelTapped(int channelNumber) {
     /// 清除分屏区域选中状态，避免视觉混淆
     setState(() => _selectedAreaIndex = -1);
+
     /// 更新矩阵状态，选中该输入通道
     _matrixState.selectInput(channelNumber);
   }
@@ -765,16 +819,17 @@ class _BigScreenPageState extends State<BigScreenPage> {
   /// - [typeName]：通道类型名称（如"输入"、"输出"）
   /// - [channelNumber]：通道号
   /// - [isOutput]：是否为输出通道（true为输出，false为输入）
-  void _showRenameDialog(
-      String typeName, int channelNumber, bool isOutput) {
+  void _showRenameDialog(String typeName, int channelNumber, bool isOutput) {
     showRenameDialog(
       context,
       typeName: typeName,
       channelNumber: channelNumber,
+
       /// 根据通道类型获取当前名称
       currentName: isOutput
           ? _nameManager.getOutputName(channelNumber)
           : _nameManager.getInputName(channelNumber),
+
       /// 确认回调：保存新名称到名称管理器
       onConfirm: (newName) {
         if (isOutput) {

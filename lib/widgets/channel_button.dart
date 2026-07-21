@@ -104,7 +104,8 @@ class _ChannelButtonState extends State<ChannelButton> {
       (timer) {
         setState(() {
           // 计算当前长按进度：已触发次数 × 每次间隔 / 总长按时长
-          _pressProgress = timer.tick *
+          _pressProgress =
+              timer.tick *
               _config.longPressTickIntervalMs /
               _config.longPressDurationMs;
         });
@@ -159,8 +160,7 @@ class _ChannelButtonState extends State<ChannelButton> {
     final double borderRadius =
         widget.width * DeviceConfig.buttonBorderRadiusRatio;
     // 计算高亮状态阴影模糊度
-    final double shadowBlur =
-        widget.width * DeviceConfig.buttonShadowBlurRatio;
+    final double shadowBlur = widget.width * DeviceConfig.buttonShadowBlurRatio;
     // 计算普通状态阴影模糊度
     final double smallShadowBlur =
         widget.width * DeviceConfig.buttonShadowBlurSmallRatio;
@@ -172,8 +172,7 @@ class _ChannelButtonState extends State<ChannelButton> {
       onTapCancel: _onTapCancel,
       // 动画容器 - 状态变化时平滑过渡
       child: AnimatedContainer(
-        duration:
-            Duration(milliseconds: DeviceConfig.animationDurationMs),
+        duration: Duration(milliseconds: DeviceConfig.animationDurationMs),
         curve: Curves.easeInOut,
         width: widget.width,
         height: widget.height,
@@ -204,8 +203,8 @@ class _ChannelButtonState extends State<ChannelButton> {
             color: _isPressing
                 ? DeviceConfig.colorPressing
                 : (widget.isHighlighted
-                    ? activeColor
-                    : DeviceConfig.colorButtonBorder),
+                      ? activeColor
+                      : DeviceConfig.colorButtonBorder),
             // 边框宽度：按下状态最粗(2.0)，高亮状态中等(1.5)，普通状态最细(1.0)
             width: _isPressing ? 2.0 : (widget.isHighlighted ? 1.5 : 1.0),
           ),
@@ -229,7 +228,8 @@ class _ChannelButtonState extends State<ChannelButton> {
                     value: _pressProgress.clamp(0.0, 1.0),
                     backgroundColor: Colors.transparent,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                        DeviceConfig.colorPressing),
+                      DeviceConfig.colorPressing,
+                    ),
                     minHeight: DeviceConfig.longPressIndicatorHeight,
                   ),
                 ),
@@ -249,8 +249,7 @@ class _ChannelButtonState extends State<ChannelButton> {
                   widget.label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize:
-                        widget.height * DeviceConfig.buttonFontSizeRatio,
+                    fontSize: widget.height * DeviceConfig.buttonFontSizeRatio,
                     fontWeight: FontWeight.w600,
                     color: widget.isHighlighted
                         ? Colors.white

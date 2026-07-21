@@ -111,49 +111,57 @@ class _MainPageState extends State<MainPage> {
     final List<_PageEntry> entries = [];
 
     if (_config.showPowerControl) {
-      entries.add(_PageEntry(
-        icon: Icons.bolt,
-        label: '电源控制',
-        page: const PowerControlPage(),
-        onConnect: () => _deviceConnection.connect(),
-        onDisconnect: () => _deviceConnection.disconnect(),
-      ));
+      entries.add(
+        _PageEntry(
+          icon: Icons.bolt,
+          label: '电源控制',
+          page: const PowerControlPage(),
+          onConnect: () => _deviceConnection.connect(),
+          onDisconnect: () => _deviceConnection.disconnect(),
+        ),
+      );
     }
 
     if (_config.showBigScreen) {
-      entries.add(_PageEntry(
-        icon: Icons.tv,
-        label: '大屏控制',
-        page: const BigScreenPage(),
-        onConnect: () {
-          _bigScreenConnection.connect();
-          _matrixConnection.connect();
-        },
-        onDisconnect: () {
-          _bigScreenConnection.disconnect();
-          _matrixConnection.disconnect();
-        },
-      ));
+      entries.add(
+        _PageEntry(
+          icon: Icons.tv,
+          label: '大屏控制',
+          page: const BigScreenPage(),
+          onConnect: () {
+            _bigScreenConnection.connect();
+            _matrixConnection.connect();
+          },
+          onDisconnect: () {
+            _bigScreenConnection.disconnect();
+            _matrixConnection.disconnect();
+          },
+        ),
+      );
     }
 
     if (_config.showVideoMatrix) {
-      entries.add(_PageEntry(
-        icon: Icons.videocam_outlined,
-        label: '视频矩阵',
-        page: const VideoMatrixPage(),
-        onConnect: () => _matrixConnection.connect(),
-        onDisconnect: () => _matrixConnection.disconnect(),
-      ));
+      entries.add(
+        _PageEntry(
+          icon: Icons.videocam_outlined,
+          label: '视频矩阵',
+          page: const VideoMatrixPage(),
+          onConnect: () => _matrixConnection.connect(),
+          onDisconnect: () => _matrixConnection.disconnect(),
+        ),
+      );
     }
 
     if (_config.showCameraControl) {
-      entries.add(_PageEntry(
-        icon: Icons.videocam,
-        label: '摄像头',
-        page: const CameraControlPage(),
-        onConnect: () => _cameraManager.connectCamera(1), // 进入页面时默认连接第1个摄像头
-        onDisconnect: () => _cameraManager.disconnectAll(), // 离开页面时断开所有摄像头
-      ));
+      entries.add(
+        _PageEntry(
+          icon: Icons.videocam,
+          label: '摄像头',
+          page: const CameraControlPage(),
+          onConnect: () => _cameraManager.connectCamera(1), // 进入页面时默认连接第1个摄像头
+          onDisconnect: () => _cameraManager.disconnectAll(), // 离开页面时断开所有摄像头
+        ),
+      );
     }
 
     return entries;
@@ -175,7 +183,8 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _switchToPage(int newIndex) {
-    if (_currentIndex == newIndex || newIndex < 0 || newIndex >= _pageCount) return;
+    if (_currentIndex == newIndex || newIndex < 0 || newIndex >= _pageCount)
+      return;
 
     _pageEntries[_currentIndex].onDisconnect();
     _pageEntries[newIndex].onConnect();
@@ -206,7 +215,11 @@ class _MainPageState extends State<MainPage> {
       return Scaffold(
         appBar: _buildAppBar(),
         body: const Center(
-          child: Text('没有启用的控制页面\n请在 DeviceConfig 中设置 showXxx = true', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 16)),
+          child: Text(
+            '没有启用的控制页面\n请在 DeviceConfig 中设置 showXxx = true',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey, fontSize: 16),
+          ),
         ),
       );
     }
@@ -229,14 +242,17 @@ class _MainPageState extends State<MainPage> {
         onLongPress: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const DebugConfigPage(),
-            ),
+            MaterialPageRoute(builder: (context) => const DebugConfigPage()),
           );
         },
         child: const Text(
           '欢迎使用中控系统',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFD4C5A9), letterSpacing: 2.0),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFFD4C5A9),
+            letterSpacing: 2.0,
+          ),
         ),
       ),
       bottom: PreferredSize(
@@ -278,15 +294,29 @@ class _MainPageState extends State<MainPage> {
         curve: Curves.easeInOut,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF1F4068).withAlpha(60) : Colors.transparent,
+          color: isSelected
+              ? const Color(0xFF1F4068).withAlpha(60)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 22, color: isSelected ? const Color(0xFF6B9BD2) : Colors.grey[600]),
+            Icon(
+              icon,
+              size: 22,
+              color: isSelected ? const Color(0xFF6B9BD2) : Colors.grey[600],
+            ),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal, color: isSelected ? const Color(0xFFD4C5A9) : Colors.grey[600], letterSpacing: 1.0)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                color: isSelected ? const Color(0xFFD4C5A9) : Colors.grey[600],
+                letterSpacing: 1.0,
+              ),
+            ),
           ],
         ),
       ),
