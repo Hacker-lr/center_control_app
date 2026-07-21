@@ -65,6 +65,17 @@ class _BigScreenPageState extends State<BigScreenPage> {
 
   /// 获取大屏输出通道列表，从设备配置中读取
   List<int> get _outputChannels => _config.bigScreenOutputChannels;
+  /// 通道名称管理器，负责输入/输出通道的自定义命名
+  final ChannelNameManager _nameManager = ChannelNameManager();
+
+  /// 设备配置实例，提供运行时配置参数
+  final DeviceConfig _config = DeviceConfig();
+
+  /// 获取矩阵输入通道总数，从设备配置中读取
+  int get _inputCount => _config.matrixInputCount;
+
+  /// 获取大屏输出通道列表，从设备配置中读取
+  List<int> get _outputChannels => _config.bigScreenOutputChannels;
 
   /// 分屏模式对应的区域数量映射表
   /// 索引对应布局类型：0-全屏, 1-全屏16:9, 2-二分屏, 3-三分屏, 4-四分屏, 5-五分屏
@@ -72,6 +83,24 @@ class _BigScreenPageState extends State<BigScreenPage> {
 
   List<MapEntry<int, String>> _buildLayoutButtonEntries() {
     final List<MapEntry<int, String>> entries = [];
+    if (_config.showBigScreenFull) {
+      entries.add(const MapEntry(0, '全屏'));
+    }
+    if (_config.showBigScreenFull169) {
+      entries.add(const MapEntry(1, '全屏16:9'));
+    }
+    if (_config.showBigScreenSplit2) {
+      entries.add(const MapEntry(2, '二分屏'));
+    }
+    if (_config.showBigScreenSplit3) {
+      entries.add(const MapEntry(3, '三分屏'));
+    }
+    if (_config.showBigScreenSplit4) {
+      entries.add(const MapEntry(4, '四分屏'));
+    }
+    if (_config.showBigScreenSplit5) {
+      entries.add(const MapEntry(5, '五分屏'));
+    }
     if (_config.showBigScreenFull) {
       entries.add(const MapEntry(0, '全屏'));
     }
@@ -675,6 +704,19 @@ class _BigScreenPageState extends State<BigScreenPage> {
             .replaceAll('{layout}', '$layoutCode');
 
     /// 发送分屏命令给拼接器
+
+    /// 根据配置选择命令格式（十六进制或ASCII），替换命令模板中的占位符
+    final String command = _config.bigScreenSendAsHex
+        /// 十六进制模式：将布局代码转换为两位十六进制字符串
+        ? _config.hexBigScreenLayoutCmd.replaceAll(
+            '{layout02X}',
+            layoutCode.toRadixString(16).padLeft(2, '0').toUpperCase(),
+          )
+        /// ASCII模式：直接使用十进制数字
+        : _config.bigScreenLayoutAsciiCmd
+            .replaceAll('{layout}', '$layoutCode');
+
+    /// 发送分屏命令给拼接器
     _bigScreenConnection.sendCommand(command);
   }
 
@@ -715,6 +757,25 @@ class _BigScreenPageState extends State<BigScreenPage> {
 
     /// 更新本地矩阵状态：记录输入输出绑定关系
     _matrixState.bindOutput(outputChannel, selectedInput);
+
+    /// 根据配置选择命令格式（十六进制或ASCII），替换命令模板中的占位符
+    final String command = _config.matrixSendAsHex
+        /// 十六进制模式：将输入和输出通道号转换为两位十六进制字符串
+        ? _config.hexMatrixSwitchCmd
+            .replaceAll(
+                '{input02X}',
+                selectedInput
+                    .toRadixString(16)
+                    .padLeft(2, '0')
+                    .toUpperCase())
+            .replaceAll(
+                '{output02X}',
+                outputChannel
+                    .toRadixString(16)
+                    .padLeft(2, '0')
+                    .toUpperCase())
+        /// ASCII模式：直接使用十进制数字
+        : _config.matrixSwitchAsciiCmd
 
     /// 根据配置选择命令格式（十六进制或ASCII），替换命令模板中的占位符
     final String command = _config.matrixSendAsHex

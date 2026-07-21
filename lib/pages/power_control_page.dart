@@ -34,6 +34,10 @@ class _PowerControlPageState extends State<PowerControlPage> {
   /// 包含电源控制相关的配置项（指令格式、指令内容等）
   final DeviceConfig _config = DeviceConfig();
 
+  /// 设备配置实例
+  /// 包含电源控制相关的配置项（指令格式、指令内容等）
+  final DeviceConfig _config = DeviceConfig();
+
   @override
   Widget build(BuildContext context) {
     // 使用 ListenableBuilder 监听设备连接状态变化，自动刷新 UI
@@ -93,7 +97,9 @@ class _PowerControlPageState extends State<PowerControlPage> {
         children: [
           // 卡片标题："时序电源控制"
           Padding(
-            padding: EdgeInsets.only(bottom: ResponsiveUtils.getSpacing(context, 12)),
+            padding: EdgeInsets.only(
+              bottom: ResponsiveUtils.getSpacing(context, 12),
+            ),
             child: Text(
               '时序电源控制',
               style: TextStyle(
@@ -217,7 +223,12 @@ class _PowerControlPageState extends State<PowerControlPage> {
   /// [onPressed] 点击回调函数
   /// ============================================================
   Widget _buildPowerButton(
-      String label, IconData icon, bool isActive, Color activeColor, VoidCallback onPressed) {
+    String label,
+    IconData icon,
+    bool isActive,
+    Color activeColor,
+    VoidCallback onPressed,
+  ) {
     // 获取响应式按钮尺寸
     final double buttonSize = ResponsiveUtils.getPowerButtonSize(context);
     // 图标大小为按钮尺寸的 30%
@@ -236,7 +247,9 @@ class _PowerControlPageState extends State<PowerControlPage> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           // 激活时使用主题色，非激活时使用深色背景
-          color: isActive ? activeColor.withAlpha(220) : const Color(0xFF1E2228),
+          color: isActive
+              ? activeColor.withAlpha(220)
+              : const Color(0xFF1E2228),
           // 激活时显示发光效果，非激活时显示阴影效果
           boxShadow: isActive
               ? [
@@ -264,7 +277,11 @@ class _PowerControlPageState extends State<PowerControlPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               // 图标
-              Icon(icon, size: iconSize, color: isActive ? Colors.white : Colors.grey[500]),
+              Icon(
+                icon,
+                size: iconSize,
+                color: isActive ? Colors.white : Colors.grey[500],
+              ),
               SizedBox(height: ResponsiveUtils.getSpacing(context, 6)),
               // 文字标签
               Text(
@@ -330,6 +347,16 @@ class _PowerControlPageState extends State<PowerControlPage> {
         ? _config.hexPowerOnCmd
         : _config.powerOnAsciiCmd;
     // 发送指令到设备
+    // 更新按钮激活状态
+    setState(() {
+      _isPowerOnActive = true;
+      _isPowerOffActive = false;
+    });
+    // 根据配置选择指令格式
+    final String command = _config.powerSendAsHex
+        ? _config.hexPowerOnCmd
+        : _config.powerOnAsciiCmd;
+    // 发送指令到设备
     _deviceConnection.sendCommand(command);
   }
 
@@ -340,6 +367,16 @@ class _PowerControlPageState extends State<PowerControlPage> {
   /// 3. 发送电源关闭指令到设备
   /// ============================================================
   void _handlePowerOff() {
+    // 更新按钮激活状态
+    setState(() {
+      _isPowerOffActive = true;
+      _isPowerOnActive = false;
+    });
+    // 根据配置选择指令格式
+    final String command = _config.powerSendAsHex
+        ? _config.hexPowerOffCmd
+        : _config.powerOffAsciiCmd;
+    // 发送指令到设备
     // 更新按钮激活状态
     setState(() {
       _isPowerOffActive = true;

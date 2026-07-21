@@ -50,6 +50,17 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
 
   /// 获取矩阵输出通道数量，从设备配置中读取
   int get _outputCount => _config.matrixOutputCount;
+  /// 通道名称管理器，负责管理输入输出通道的自定义名称
+  final ChannelNameManager _nameManager = ChannelNameManager();
+
+  /// 设备配置实例，提供矩阵通道数量、命令格式等配置
+  final DeviceConfig _config = DeviceConfig();
+
+  /// 获取矩阵输入通道数量，从设备配置中读取
+  int get _inputCount => _config.matrixInputCount;
+
+  /// 获取矩阵输出通道数量，从设备配置中读取
+  int get _outputCount => _config.matrixOutputCount;
 
   /// 构建页面主布局
   ///
@@ -399,7 +410,24 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
                   .toRadixString(16)
                   .padLeft(2, '0')
                   .toUpperCase());
+    if (_config.matrixSendAsHex) {
+      // 十六进制格式：将输入输出编号转换为两位十六进制字符串
+      command = _config.hexMatrixSwitchCmd
+          .replaceAll(
+              '{input02X}',
+              selectedInput
+                  .toRadixString(16)
+                  .padLeft(2, '0')
+                  .toUpperCase())
+          .replaceAll(
+              '{output02X}',
+              channelNumber
+                  .toRadixString(16)
+                  .padLeft(2, '0')
+                  .toUpperCase());
     } else {
+      // ASCII 格式：直接替换占位符为十进制数字
+      command = _config.matrixSwitchAsciiCmd
       // ASCII 格式：直接替换占位符为十进制数字
       command = _config.matrixSwitchAsciiCmd
           .replaceAll('{input}', '$selectedInput')

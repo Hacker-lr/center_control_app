@@ -82,7 +82,8 @@ class _SquareButtonState extends State<SquareButton> {
       Duration(milliseconds: _config.longPressTickIntervalMs),
       (timer) {
         setState(() {
-          _pressProgress = timer.tick *
+          _pressProgress =
+              timer.tick *
               _config.longPressTickIntervalMs /
               _config.longPressDurationMs;
         });
@@ -170,8 +171,8 @@ class _SquareButtonState extends State<SquareButton> {
             color: _isPressing
                 ? DeviceConfig.colorPressing
                 : (widget.isActive
-                    ? widget.activeColor
-                    : const Color(0xFF3A3F48)),
+                      ? widget.activeColor
+                      : const Color(0xFF3A3F48)),
             width: _isPressing ? 2.0 : (widget.isActive ? 2.0 : 1.0),
           ),
         ),
@@ -192,7 +193,8 @@ class _SquareButtonState extends State<SquareButton> {
                     value: _pressProgress.clamp(0.0, 1.0),
                     backgroundColor: Colors.transparent,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                        DeviceConfig.colorPressing),
+                      DeviceConfig.colorPressing,
+                    ),
                     minHeight: DeviceConfig.longPressIndicatorHeight,
                   ),
                 ),

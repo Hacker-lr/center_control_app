@@ -6,6 +6,9 @@ import 'device_config.dart';
 /// ============================================================
 /// 连接状态枚举，定义了设备连接的四种状态
 /// ============================================================
+/// ============================================================
+/// 连接状态枚举，定义了设备连接的四种状态
+/// ============================================================
 enum ConnectionStatus {
   /// 未连接状态，设备尚未建立连接或已断开
   disconnected,
@@ -24,7 +27,18 @@ enum ConnectionStatus {
 /// 设备连接抽象基类，提供TCP/UDP连接管理、心跳检测和自动重连功能
 /// 继承自ChangeNotifier，用于通知连接状态变化
 /// ============================================================
+/// ============================================================
+/// 设备连接抽象基类，提供TCP/UDP连接管理、心跳检测和自动重连功能
+/// 继承自ChangeNotifier，用于通知连接状态变化
+/// ============================================================
 abstract class BaseConnection extends ChangeNotifier {
+  /// TCP套接字实例，用于TCP模式下与设备进行网络通信，初始值为null表示未连接
+  Socket? _tcpSocket;
+
+  /// UDP数据报套接字实例，用于UDP模式下与设备进行网络通信，初始值为null表示未连接
+  RawDatagramSocket? _udpSocket;
+
+  /// 当前连接状态，初始值为disconnected表示未连接
   /// TCP套接字实例，用于TCP模式下与设备进行网络通信，初始值为null表示未连接
   Socket? _tcpSocket;
 
@@ -53,6 +67,10 @@ abstract class BaseConnection extends ChangeNotifier {
   final DeviceConfig _config = DeviceConfig();
 
   /// 获取当前连接状态
+  /// 配置实例，用于获取连接超时、心跳间隔等配置参数
+  final DeviceConfig _config = DeviceConfig();
+
+  /// 获取当前连接状态
   ConnectionStatus get status => _status;
 
   /// 判断是否已连接，返回true表示已成功连接
@@ -74,6 +92,11 @@ abstract class BaseConnection extends ChangeNotifier {
   bool get useTcp;
 
   /// 是否以十六进制格式发送数据，子类必须实现此抽象属性
+
+  /// 是否使用TCP协议（true=TCP，false=UDP），子类必须实现此抽象属性
+  bool get useTcp;
+
+  /// 是否以十六进制格式发送数据，子类必须实现此抽象属性
   bool get sendAsHex;
 
   /// 心跳检测命令，子类必须实现此抽象属性
@@ -84,13 +107,21 @@ abstract class BaseConnection extends ChangeNotifier {
   /// 如果当前已连接或正在连接，则直接返回
   /// 连接成功后会自动启动心跳检测
   /// ============================================================
+  /// ============================================================
+  /// 建立与设备的连接（自动选择TCP或UDP）
+  /// 如果当前已连接或正在连接，则直接返回
+  /// 连接成功后会自动启动心跳检测
+  /// ============================================================
   Future<void> connect() async {
     if (_status == ConnectionStatus.connected ||
         _status == ConnectionStatus.connecting) {
       return;
     }
+    // 设置为非手动断开状态，允许自动重连
     _isManualDisconnect = false;
+    // 执行实际的TCP连接建立操作
     await _establishConnection();
+    // 连接成功后启动心跳检测机制
     _startHeartbeat();
   }
 
@@ -99,12 +130,27 @@ abstract class BaseConnection extends ChangeNotifier {
   /// [manual] 参数表示是否为手动断开，默认值为true
   /// 手动断开时不会触发自动重连，自动断开（如网络异常）时会触发重连
   /// ============================================================
+  /// ============================================================
+  /// 断开与设备的连接
+  /// [manual] 参数表示是否为手动断开，默认值为true
+  /// 手动断开时不会触发自动重连，自动断开（如网络异常）时会触发重连
+  /// ============================================================
   void disconnect({bool manual = true}) {
     _isManualDisconnect = manual;
+    // 取消并清空心跳定时器
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+    // 取消并清空重连定时器
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+
+    // 清理TCP套接字
+    _tcpSocket?.destroy();
+    _tcpSocket = null;
+
+    // 清理UDP套接字
+    _udpSocket?.close();
+    _udpSocket = null;
 
     // 清理TCP套接字
     _tcpSocket?.destroy();
@@ -121,9 +167,14 @@ abstract class BaseConnection extends ChangeNotifier {
   /// ============================================================
   /// 释放资源，清理连接相关的所有定时器和套接字
   /// ============================================================
+  /// ============================================================
+  /// 释放资源，清理连接相关的所有定时器和套接字
+  /// ============================================================
   @override
   void dispose() {
+    // 以手动方式断开连接，避免触发自动重连
     disconnect(manual: true);
+    // 调用父类的dispose方法，清理ChangeNotifier资源
     super.dispose();
   }
 
@@ -132,124 +183,179 @@ abstract class BaseConnection extends ChangeNotifier {
   /// [command] 参数为要发送的指令字符串，可以是普通文本或十六进制格式
   /// 返回值为bool类型，true表示发送成功，false表示发送失败或未连接
   /// ============================================================
+  /// ============================================================
+  /// 向设备发送指令
+  /// [command] 参数为要发送的指令字符串，可以是普通文本或十六进制格式
+  /// 返回值为bool类型，true表示发送成功，false表示发送失败或未连接
+  /// ============================================================
   Future<bool> sendCommand(String command) async {
     if (_status != ConnectionStatus.connected) {
       debugPrint('[$runtimeType] 未连接，无法发送指令: $command');
-      return false;
-    }
-
-    try {
-      final Uint8List data = sendAsHex
-          ? _hexStringToBytes(command)
-          : Uint8List.fromList(command.codeUnits);
-
-      if (useTcp) {
-        // TCP模式：通过TCP套接字发送
-        if (_tcpSocket == null) {
-          debugPrint('[$runtimeType] TCP套接字为空');
-          return false;
-        }
-        _tcpSocket!.add(data);
-        await _tcpSocket!.flush();
-      } else {
-        // UDP模式：通过UDP套接字发送
-        if (_udpSocket == null) {
-          debugPrint('[$runtimeType] UDP套接字为空');
-          return false;
-        }
-        _udpSocket!.send(data, InternetAddress(deviceIp), devicePort);
+      if (_status != ConnectionStatus.connected) {
+        debugPrint('[$runtimeType] 未连接，无法发送指令: $command');
+        return false;
       }
 
-      if (sendAsHex) {
-        final hexStr = data
-            .map((b) => b.toRadixString(16).padLeft(2, '0'))
-            .join(' ');
-        debugPrint('[$runtimeType] 指令发送成功(HEX): $command → [$hexStr]');
-      } else {
-        debugPrint('[$runtimeType] 指令发送成功: $command');
-      }
-      return true;
-    } catch (e) {
-      debugPrint('[$runtimeType] 指令发送失败: $e');
-      _handleDisconnection();
-      return false;
-    }
-  }
-
-  /// ============================================================
-  /// 将十六进制字符串转换为字节列表
-  /// [hexStr] 参数为十六进制格式的字符串，支持多种格式如"0x1A 0x2B"、"1A,2B"、"1A 2B"等
-  /// 返回值为转换后的Uint8List字节数组
-  /// ============================================================
-  Uint8List _hexStringToBytes(String hexStr) {
-    final String cleaned = hexStr
-        .replaceAll('0x', '')
-        .replaceAll('0X', '')
-        .replaceAll(',', ' ')
-        .replaceAll(';', ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-
-    final List<String> parts = cleaned.split(' ');
-    final List<int> bytes = [];
-
-    for (final part in parts) {
-      if (part.isEmpty) continue;
       try {
-        bytes.add(int.parse(part, radix: 16).clamp(0, 255));
+        // 根据sendAsHex配置决定数据转换方式
+        // 如果sendAsHex为true，将十六进制字符串转换为字节
+        // 否则将普通字符串转换为UTF-8字节
+        final Uint8List data = sendAsHex
+            ? _hexStringToBytes(command)
+            : Uint8List.fromList(command.codeUnits);
+
+        if (useTcp) {
+          // TCP模式：通过TCP套接字发送
+          if (_tcpSocket == null) {
+            debugPrint('[$runtimeType] TCP套接字为空');
+            return false;
+          }
+          _tcpSocket!.add(data);
+          await _tcpSocket!.flush();
+        } else {
+          // UDP模式：通过UDP套接字发送
+          if (_udpSocket == null) {
+            debugPrint('[$runtimeType] UDP套接字为空');
+            return false;
+          }
+          _udpSocket!.send(data, InternetAddress(deviceIp), devicePort);
+        }
+
+        if (sendAsHex) {
+          final hexStr = data
+              .map((b) => b.toRadixString(16).padLeft(2, '0'))
+              .join(' ');
+          debugPrint('[$runtimeType] 指令发送成功(HEX): $command → [$hexStr]');
+        } else {
+          debugPrint('[$runtimeType] 指令发送成功: $command');
+        }
+        // 返回发送成功
+        return true;
       } catch (e) {
-        debugPrint('[$runtimeType] 16进制解析错误: "$part"');
-        bytes.add(0);
+        debugPrint('[$runtimeType] 指令发送失败: $e');
+        debugPrint('[$runtimeType] 指令发送失败: $e');
+        _handleDisconnection();
+        return false;
       }
     }
-    return Uint8List.fromList(bytes);
-  }
 
-  /// ============================================================
-  /// 建立连接的内部方法（支持TCP和UDP）
-  /// ============================================================
-  Future<void> _establishConnection() async {
-    _updateStatus(ConnectionStatus.connecting);
+    /// ============================================================
+    /// 将十六进制字符串转换为字节列表
+    /// [hexStr] 参数为十六进制格式的字符串，支持多种格式如"0x1A 0x2B"、"1A,2B"、"1A 2B"等
+    /// 返回值为转换后的Uint8List字节数组
+    /// ============================================================
+    /// ============================================================
+    /// 将十六进制字符串转换为字节列表
+    /// [hexStr] 参数为十六进制格式的字符串，支持多种格式如"0x1A 0x2B"、"1A,2B"、"1A 2B"等
+    /// 返回值为转换后的Uint8List字节数组
+    /// ============================================================
+    Uint8List _hexStringToBytes(String hexStr) {
+      final String cleaned = hexStr
+          .replaceAll('0x', '')
+          .replaceAll('0X', '')
+          .replaceAll(',', ' ')
+          .replaceAll(';', ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
 
-    try {
-      if (useTcp) {
-        // TCP模式：创建TCP连接
-        _tcpSocket = await Socket.connect(
-          deviceIp,
-          devicePort,
-          timeout: Duration(seconds: _config.connectionTimeoutSeconds),
-        );
-        _tcpSocket!.setOption(SocketOption.tcpNoDelay, true);
-        _tcpSocket!.listen(
-          _onDataReceived,
-          onError: _onSocketError,
-          onDone: _onSocketDone,
-          cancelOnError: false,
-        );
-        debugPrint('[$runtimeType] TCP连接成功 -> $deviceIp:$devicePort');
-      } else {
-        // UDP模式：创建UDP套接字并绑定到本地端口
-        _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-        _udpSocket!.listen(_onUdpDataReceived);
-        debugPrint('[$runtimeType] UDP连接成功 -> $deviceIp:$devicePort');
+      // 将清理后的字符串按空格分割成单个十六进制数值字符串
+      final List<String> parts = cleaned.split(' ');
+      // 创建用于存储转换结果的字节列表
+      final List<int> bytes = [];
+
+      // 遍历每个十六进制数值字符串
+      for (final part in parts) {
+        // 跳过空字符串
+        if (part.isEmpty) continue;
+        try {
+          // 将十六进制字符串解析为整数，并限制在0-255范围内
+          bytes.add(int.parse(part, radix: 16).clamp(0, 255));
+        } catch (e) {
+          debugPrint('[$runtimeType] 16进制解析错误: "$part"');
+          debugPrint('[$runtimeType] 16进制解析错误: "$part"');
+          bytes.add(0);
+        }
       }
+      // 将整数列表转换为Uint8List并返回
+      return Uint8List.fromList(bytes);
+    }
 
-      _updateStatus(ConnectionStatus.connected);
+    /// ============================================================
+    /// 建立连接的内部方法（支持TCP和UDP）
+    /// ============================================================
+    /// ============================================================
+    /// 建立连接的内部方法（支持TCP和UDP）
+    /// ============================================================
+    Future<void> _establishConnection() async {
+      _updateStatus(ConnectionStatus.connecting);
+
+      try {
+        if (useTcp) {
+          // TCP模式：创建TCP连接
+          _tcpSocket = await Socket.connect(
+            deviceIp,
+            devicePort,
+            timeout: Duration(seconds: _config.connectionTimeoutSeconds),
+          );
+          _tcpSocket!.setOption(SocketOption.tcpNoDelay, true);
+          _tcpSocket!.listen(
+            _onDataReceived,
+            onError: _onSocketError,
+            onDone: _onSocketDone,
+            cancelOnError: false,
+          );
+          debugPrint('[$runtimeType] TCP连接成功 -> $deviceIp:$devicePort');
+        } else {
+          // UDP模式：创建UDP套接字并绑定到本地端口
+          _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+          _udpSocket!.listen(_onUdpDataReceived);
+          debugPrint('[$runtimeType] UDP连接成功 -> $deviceIp:$devicePort');
+        }
+
+        _updateStatus(ConnectionStatus.connected);
+        // 记录当前时间作为最后一次心跳响应时间
+        _lastHeartbeatResponse = DateTime.now();
+        // 取消重连定时器，因为连接已成功建立
+        _reconnectTimer?.cancel();
+        _reconnectTimer = null;
+      } catch (e) {
+        debugPrint('[$runtimeType] 连接失败: $e');
+        debugPrint('[$runtimeType] 连接失败: $e');
+        _updateStatus(ConnectionStatus.error);
+        // 启动自动重连机制
+        _startReconnect();
+      }
+    }
+
+    /// ============================================================
+    /// TCP Socket数据接收回调方法
+    /// ============================================================
+    /// ============================================================
+    /// TCP Socket数据接收回调方法
+    /// ============================================================
+    void _onDataReceived(Uint8List data) {
       _lastHeartbeatResponse = DateTime.now();
-      _reconnectTimer?.cancel();
-      _reconnectTimer = null;
-    } catch (e) {
-      debugPrint('[$runtimeType] 连接失败: $e');
-      _updateStatus(ConnectionStatus.error);
-      _startReconnect();
+      debugPrint('[$runtimeType] 收到数据: ${String.fromCharCodes(data)}');
     }
-  }
 
-  /// ============================================================
-  /// TCP Socket数据接收回调方法
-  /// ============================================================
-  void _onDataReceived(Uint8List data) {
-    _lastHeartbeatResponse = DateTime.now();
+    /// ============================================================
+    /// UDP Socket数据接收回调方法
+    /// ============================================================
+    void _onUdpDataReceived(RawSocketEvent event) {
+      if (event == RawSocketEvent.read && _udpSocket != null) {
+        final Datagram? datagram = _udpSocket!.receive();
+        if (datagram != null) {
+          _lastHeartbeatResponse = DateTime.now();
+          debugPrint(
+            '[$runtimeType] UDP收到数据: ${String.fromCharCodes(datagram.data)}',
+          );
+        }
+      }
+    }
+
+    /// ============================================================
+    /// TCP Socket错误回调方法
+    /// ============================================================
     debugPrint('[$runtimeType] 收到数据: ${String.fromCharCodes(data)}');
   }
 
@@ -273,17 +379,25 @@ abstract class BaseConnection extends ChangeNotifier {
   /// ============================================================
   void _onSocketError(dynamic error) {
     debugPrint('[$runtimeType] Socket错误: $error');
+    debugPrint('[$runtimeType] Socket错误: $error');
     _handleDisconnection();
   }
 
   /// ============================================================
   /// TCP Socket关闭回调方法
   /// ============================================================
+  /// ============================================================
+  /// TCP Socket关闭回调方法
+  /// ============================================================
   void _onSocketDone() {
+    debugPrint('[$runtimeType] Socket已关闭');
     debugPrint('[$runtimeType] Socket已关闭');
     _handleDisconnection();
   }
 
+  /// ============================================================
+  /// 处理连接断开的内部方法
+  /// ============================================================
   /// ============================================================
   /// 处理连接断开的内部方法
   /// ============================================================
@@ -293,14 +407,23 @@ abstract class BaseConnection extends ChangeNotifier {
     _udpSocket?.close();
     _udpSocket = null;
 
+    _tcpSocket?.destroy();
+    _tcpSocket = null;
+    _udpSocket?.close();
+    _udpSocket = null;
+
     if (_status != ConnectionStatus.disconnected) {
       _updateStatus(ConnectionStatus.disconnected);
     }
+    // 如果不是手动断开连接，则启动自动重连
     if (!_isManualDisconnect) {
       _startReconnect();
     }
   }
 
+  /// ============================================================
+  /// 启动心跳检测机制
+  /// ============================================================
   /// ============================================================
   /// 启动心跳检测机制
   /// ============================================================
@@ -310,7 +433,12 @@ abstract class BaseConnection extends ChangeNotifier {
       debugPrint('[$runtimeType] 心跳命令为空，跳过心跳检测');
       return;
     }
+    if (heartbeatCommand.isEmpty) {
+      debugPrint('[$runtimeType] 心跳命令为空，跳过心跳检测');
+      return;
+    }
     _heartbeatTimer = Timer.periodic(
+      Duration(seconds: _config.heartbeatIntervalSeconds),
       Duration(seconds: _config.heartbeatIntervalSeconds),
       (_) => _sendHeartbeat(),
     );
@@ -320,10 +448,15 @@ abstract class BaseConnection extends ChangeNotifier {
   /// ============================================================
   /// 发送心跳包的内部方法（支持TCP和UDP）
   /// ============================================================
+  /// ============================================================
+  /// 发送心跳包的内部方法（支持TCP和UDP）
+  /// ============================================================
   Future<void> _sendHeartbeat() async {
+    if (_status != ConnectionStatus.connected) return;
     if (_status != ConnectionStatus.connected) return;
 
     try {
+      // 根据sendAsHex配置转换心跳命令为字节数据
       final Uint8List data = sendAsHex
           ? _hexStringToBytes(heartbeatCommand)
           : Uint8List.fromList(heartbeatCommand.codeUnits);
@@ -342,6 +475,7 @@ abstract class BaseConnection extends ChangeNotifier {
       _heartbeatCount++;
       debugPrint('[$runtimeType] 心跳包已发送 (#$_heartbeatCount)');
 
+      // 检查心跳响应是否超时
       if (_lastHeartbeatResponse != null) {
         final elapsed = DateTime.now()
             .difference(_lastHeartbeatResponse!)
@@ -355,6 +489,7 @@ abstract class BaseConnection extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[$runtimeType] 心跳异常: $e');
+      debugPrint('[$runtimeType] 心跳异常: $e');
       _handleDisconnection();
     }
   }
@@ -362,25 +497,35 @@ abstract class BaseConnection extends ChangeNotifier {
   /// ============================================================
   /// 启动自动重连机制
   /// ============================================================
+  /// ============================================================
+  /// 启动自动重连机制
+  /// ============================================================
   void _startReconnect() {
     if (_reconnectTimer != null && _reconnectTimer!.isActive) return;
+    // 如果是手动断开连接，不启动自动重连
     if (_isManualDisconnect) return;
 
     debugPrint('[$runtimeType] 自动重连已启动');
+    debugPrint('[$runtimeType] 自动重连已启动');
     _reconnectTimer = Timer.periodic(
       Duration(seconds: _config.reconnectIntervalSeconds),
+      Duration(seconds: _config.reconnectIntervalSeconds),
       (_) async {
+        // 检查是否已手动断开连接，如果是则取消重连定时器
         if (_isManualDisconnect) {
           _reconnectTimer?.cancel();
           _reconnectTimer = null;
           return;
         }
+        // 如果已经成功连接，取消重连定时器
         if (_status == ConnectionStatus.connected) {
           _reconnectTimer?.cancel();
           _reconnectTimer = null;
           return;
         }
+        // 尝试建立连接
         await _establishConnection();
+        // 如果连接成功，启动心跳检测并取消重连定时器
         if (_status == ConnectionStatus.connected) {
           _startHeartbeat();
           _reconnectTimer?.cancel();
@@ -393,9 +538,14 @@ abstract class BaseConnection extends ChangeNotifier {
   /// ============================================================
   /// 更新连接状态的内部方法
   /// ============================================================
+  /// ============================================================
+  /// 更新连接状态的内部方法
+  /// ============================================================
   void _updateStatus(ConnectionStatus newStatus) {
     if (_status != newStatus) {
+      // 更新内部状态
       _status = newStatus;
+      // 通知所有监听器状态已变化
       notifyListeners();
       debugPrint('[$runtimeType] 状态变更: $newStatus');
     }

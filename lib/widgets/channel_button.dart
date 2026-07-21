@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/device_config.dart';
 import '../services/device_config.dart';
 
 /// ============================================================
@@ -8,26 +10,60 @@ import '../services/device_config.dart';
 /// 支持自定义长按触发改名对话框（时长由 DeviceConfig 控制）
 /// 文字使用FittedBox自适应缩放，确保完全显示
 /// 所有颜色与交互参数取自 DeviceConfig 全局配置
+/// 支持自定义长按触发改名对话框（时长由 DeviceConfig 控制）
+/// 文字使用FittedBox自适应缩放，确保完全显示
+/// 所有颜色与交互参数取自 DeviceConfig 全局配置
 /// ============================================================
+class ChannelButton extends StatefulWidget {
+  /// 按钮显示的标签文字
 class ChannelButton extends StatefulWidget {
   /// 按钮显示的标签文字
   final String label;
 
   /// 通道类型标识（如 'input' / 'output'）
+
+  /// 通道类型标识（如 'input' / 'output'）
   final String channelType;
+
+  /// 通道编号（1-based）
 
   /// 通道编号（1-based）
   final int channelNumber;
 
   /// 是否高亮显示（选中状态）
+
+  /// 是否高亮显示（选中状态）
   final bool isHighlighted;
+
+  /// 高亮颜色，可选；若为空则使用 DeviceConfig.colorHighlightInput
 
   /// 高亮颜色，可选；若为空则使用 DeviceConfig.colorHighlightInput
   final Color? highlightColor;
 
   /// 点击回调函数
+
+  /// 点击回调函数
   final VoidCallback onTap;
 
+  /// 长按回调函数，可选；若为空则禁用长按功能
+  final VoidCallback? onLongPress;
+
+  /// 按钮固定宽度，由父组件根据可用空间计算传入
+  final double width;
+
+  /// 按钮固定高度，由父组件根据可用空间计算传入
+  final double height;
+
+  /// 构造函数
+  /// [label] 按钮标签文字，必填
+  /// [channelType] 通道类型标识，必填
+  /// [channelNumber] 通道编号（1-based），必填
+  /// [isHighlighted] 是否高亮，必填
+  /// [highlightColor] 高亮颜色，可选
+  /// [onTap] 点击回调，必填
+  /// [onLongPress] 长按回调，可选
+  /// [width] 按钮宽度，必填
+  /// [height] 按钮高度，必填
   /// 长按回调函数，可选；若为空则禁用长按功能
   final VoidCallback? onLongPress;
 
@@ -149,6 +185,100 @@ class _ChannelButtonState extends State<ChannelButton> {
       });
     }
   }
+    this.onLongPress,
+    required this.width,
+    required this.height,
+  });
+
+  @override
+  State<ChannelButton> createState() => _ChannelButtonState();
+}
+
+class _ChannelButtonState extends State<ChannelButton> {
+  /// 长按计时器，用于控制长按进度和触发时机
+  Timer? _longPressTimer;
+
+  /// 当前是否处于按下状态
+  bool _isPressing = false;
+
+  /// 长按是否已触发（防止重复触发）
+  bool _longPressTriggered = false;
+
+  /// 长按进度值（0.0 ~ 1.0）
+  double _pressProgress = 0.0;
+
+  /// DeviceConfig 实例，用于访问实例属性
+  final DeviceConfig _config = DeviceConfig();
+
+  @override
+  void dispose() {
+    // 组件销毁时取消计时器，防止内存泄漏
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 开始按下，启动长按计时器
+  /// 仅在设置了 onLongPress 回调时生效
+  void _onTapDown(TapDownDetails details) {
+    if (widget.onLongPress == null) return;
+
+    setState(() {
+      _isPressing = true;
+      _longPressTriggered = false;
+      _pressProgress = 0.0;
+    });
+
+    // 启动周期性计时器，每隔 tickInterval 更新一次进度
+    _longPressTimer = Timer.periodic(
+      Duration(milliseconds: _config.longPressTickIntervalMs),
+      (timer) {
+        setState(() {
+          // 计算当前长按进度：已触发次数 × 每次间隔 / 总长按时长
+          _pressProgress = timer.tick *
+              _config.longPressTickIntervalMs /
+              _config.longPressDurationMs;
+        });
+        // 进度达到 1.0 时触发长按回调
+        if (_pressProgress >= 1.0) {
+          timer.cancel();
+          _longPressTimer = null;
+          _longPressTriggered = true;
+          widget.onLongPress?.call();
+          setState(() {
+            _isPressing = false;
+            _pressProgress = 0.0;
+          });
+        }
+      },
+    );
+  }
+
+  /// 释放时取消计时器，仅在未触发长按的情况下调用点击事件
+  void _onTapUp(TapUpDetails details) {
+    _cancelLongPress();
+    // 只有当长按未触发时才执行点击事件
+    // 避免长按和点击同时触发
+    if (!_longPressTriggered) {
+      widget.onTap();
+    }
+  }
+
+  /// 取消时取消计时器（如手指移出按钮区域）
+  void _onTapCancel() {
+    _cancelLongPress();
+  }
+
+  /// 取消长按计时器并重置状态
+  void _cancelLongPress() {
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    if (_isPressing) {
+      setState(() {
+        _isPressing = false;
+        _pressProgress = 0.0;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -164,9 +294,26 @@ class _ChannelButtonState extends State<ChannelButton> {
     // 计算普通状态阴影模糊度
     final double smallShadowBlur =
         widget.width * DeviceConfig.buttonShadowBlurSmallRatio;
+    // 计算实际高亮颜色：优先使用自定义颜色，否则使用全局配置
+    final Color activeColor =
+        widget.highlightColor ?? DeviceConfig.colorHighlightInput;
+    // 计算圆角半径：根据按钮宽度和全局比例系数
+    final double borderRadius =
+        widget.width * DeviceConfig.buttonBorderRadiusRatio;
+    // 计算高亮状态阴影模糊度
+    final double shadowBlur =
+        widget.width * DeviceConfig.buttonShadowBlurRatio;
+    // 计算普通状态阴影模糊度
+    final double smallShadowBlur =
+        widget.width * DeviceConfig.buttonShadowBlurSmallRatio;
 
     // 手势检测器 - 监听按下、抬起、取消事件
+    // 手势检测器 - 监听按下、抬起、取消事件
     return GestureDetector(
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      // 动画容器 - 状态变化时平滑过渡
       onTapDown: _onTapDown,
       onTapUp: _onTapUp,
       onTapCancel: _onTapCancel,
@@ -174,14 +321,23 @@ class _ChannelButtonState extends State<ChannelButton> {
       child: AnimatedContainer(
         duration:
             Duration(milliseconds: DeviceConfig.animationDurationMs),
+        duration:
+            Duration(milliseconds: DeviceConfig.animationDurationMs),
         curve: Curves.easeInOut,
+        width: widget.width,
+        height: widget.height,
         width: widget.width,
         height: widget.height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(borderRadius),
           // 背景色：高亮状态使用半透明激活色，普通状态使用按钮背景色
           color: widget.isHighlighted
+          // 背景色：高亮状态使用半透明激活色，普通状态使用按钮背景色
+          color: widget.isHighlighted
               ? activeColor.withAlpha(230)
+              : DeviceConfig.colorButtonBg,
+          // 阴影：高亮状态使用大阴影，普通状态使用小阴影
+          boxShadow: widget.isHighlighted
               : DeviceConfig.colorButtonBg,
           // 阴影：高亮状态使用大阴影，普通状态使用小阴影
           boxShadow: widget.isHighlighted
@@ -200,7 +356,15 @@ class _ChannelButtonState extends State<ChannelButton> {
                   ),
                 ],
           // 边框：按下状态使用按压色，高亮状态使用激活色，普通状态使用边框色
+          // 边框：按下状态使用按压色，高亮状态使用激活色，普通状态使用边框色
           border: Border.all(
+            color: _isPressing
+                ? DeviceConfig.colorPressing
+                : (widget.isHighlighted
+                    ? activeColor
+                    : DeviceConfig.colorButtonBorder),
+            // 边框宽度：按下状态最粗(2.0)，高亮状态中等(1.5)，普通状态最细(1.0)
+            width: _isPressing ? 2.0 : (widget.isHighlighted ? 1.5 : 1.0),
             color: _isPressing
                 ? DeviceConfig.colorPressing
                 : (widget.isHighlighted
