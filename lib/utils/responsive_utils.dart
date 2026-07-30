@@ -21,84 +21,6 @@ class ResponsiveUtils {
     return MediaQuery.of(context).size.height;
   }
 
-  /// 获取屏幕最短边长度
-  /// 
-  /// [context] - BuildContext上下文，用于获取MediaQuery信息
-  /// 返回屏幕宽度和高度中的较小值，用于判断设备类型
-  static double getShortestSide(BuildContext context) {
-    return MediaQuery.of(context).size.shortestSide;
-  }
-
-  /// 根据屏幕最短边判断设备类型
-  /// 
-  /// [context] - BuildContext上下文，用于获取屏幕尺寸信息
-  /// 返回对应的DeviceType枚举值：mobile/tablet/desktop
-  /// 判断逻辑：
-  ///   - shortestSide >= 1024 → desktop（桌面设备）
-  ///   - shortestSide >= 600 → tablet（平板设备）
-  ///   - 其他 → mobile（移动设备）
-  static DeviceType getDeviceType(BuildContext context) {
-    final double shortestSide = getShortestSide(context);
-    // 桌面设备：最短边 >= 1024px
-    if (shortestSide >= 1024) return DeviceType.desktop;
-    // 平板设备：最短边 >= 600px
-    if (shortestSide >= 600) return DeviceType.tablet;
-    // 移动设备：最短边 < 600px
-    return DeviceType.mobile;
-  }
-
-  /// 根据设备类型返回对应的缩放值
-  /// 
-  /// [context] - BuildContext上下文，用于获取设备类型
-  /// [mobile] - 移动端使用的值
-  /// [tablet] - 平板端使用的值
-  /// [desktop] - 桌面端使用的值
-  /// 返回与当前设备类型匹配的值
-  static double scaleByDevice(BuildContext context, double mobile, double tablet, double desktop) {
-    switch (getDeviceType(context)) {
-      case DeviceType.mobile:
-        return mobile;
-      case DeviceType.tablet:
-        return tablet;
-      case DeviceType.desktop:
-        return desktop;
-    }
-  }
-
-  /// 根据屏幕宽度进行线性缩放
-  /// 
-  /// [context] - BuildContext上下文，用于获取屏幕宽度
-  /// [baseValue] - 基准值（基于320px宽度的设计值）
-  /// [minWidth] - 最小屏幕宽度（默认320px），低于此值按最小比例计算
-  /// [maxWidth] - 最大屏幕宽度（默认1920px），高于此值按最大比例计算
-  /// 返回缩放后的值，缩放范围为基准值的80%~140%
-  static double scaleByScreenWidth(BuildContext context, double baseValue, {double minWidth = 320, double maxWidth = 1920}) {
-    final double width = getScreenWidth(context);
-    // 计算当前宽度相对于最小宽度的比例
-    final double ratio = (width - minWidth) / (maxWidth - minWidth);
-    // 将比例限制在0.0~1.0之间，防止超出边界
-    final double clampedRatio = ratio.clamp(0.0, 1.0);
-    // 根据比例线性插值：基准值的80% + 比例 * 基准值的60%
-    return baseValue * (0.8 + clampedRatio * 0.6);
-  }
-
-  /// 根据屏幕高度进行线性缩放
-  /// 
-  /// [context] - BuildContext上下文，用于获取屏幕高度
-  /// [baseValue] - 基准值（基于480px高度的设计值）
-  /// [minHeight] - 最小屏幕高度（默认480px），低于此值按最小比例计算
-  /// [maxHeight] - 最大屏幕高度（默认1080px），高于此值按最大比例计算
-  /// 返回缩放后的值，缩放范围为基准值的80%~140%
-  static double scaleByScreenHeight(BuildContext context, double baseValue, {double minHeight = 480, double maxHeight = 1080}) {
-    final double height = getScreenHeight(context);
-    // 计算当前高度相对于最小高度的比例
-    final double ratio = (height - minHeight) / (maxHeight - minHeight);
-    // 将比例限制在0.0~1.0之间，防止超出边界
-    final double clampedRatio = ratio.clamp(0.0, 1.0);
-    // 根据比例线性插值：基准值的80% + 比例 * 基准值的60%
-    return baseValue * (0.8 + clampedRatio * 0.6);
-  }
-
   /// 获取电源按钮的尺寸
   /// 
   /// [context] - BuildContext上下文，用于获取屏幕尺寸
@@ -185,26 +107,4 @@ class ResponsiveUtils {
     // 移动设备：固定16px边距
     return const EdgeInsets.symmetric(horizontal: 16);
   }
-
-  /// 获取分屏预览区域的高度
-  /// 
-  /// [context] - BuildContext上下文，用于获取屏幕高度
-  /// 返回分屏预览区域的高度，为屏幕高度的28%
-  static double getSplitScreenPreviewHeight(BuildContext context) {
-    final double screenHeight = getScreenHeight(context);
-    // 分屏预览区域占屏幕高度的28%
-    return screenHeight * 0.28;
-  }
-}
-
-/// 设备类型枚举
-/// 
-/// 用于区分不同屏幕尺寸的设备，以便应用不同的UI布局策略
-enum DeviceType {
-  /// 移动设备：屏幕最短边 < 600px
-  mobile,
-  /// 平板设备：屏幕最短边 >= 600px 且 < 1024px
-  tablet,
-  /// 桌面设备：屏幕最短边 >= 1024px
-  desktop,
 }

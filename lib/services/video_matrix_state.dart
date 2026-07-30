@@ -5,14 +5,14 @@ import 'package:flutter/foundation.dart';
 /// 用于在大屏控制页和视频矩阵页之间同步输入/输出通道绑定关系
 /// 确保两个页面看到的通道映射状态完全一致、实时联动
 /// ============================================================
-class MatrixState extends ChangeNotifier {
+class VideoMatrixState extends ChangeNotifier {
   // ---------- 单例模式 ----------
-  static final MatrixState _instance = MatrixState._internal();
+  static final VideoMatrixState _instance = VideoMatrixState._internal();
 
   /// 工厂构造函数：返回全局唯一的单例实例
-  factory MatrixState() => _instance;
+  factory VideoMatrixState() => _instance;
 
-  MatrixState._internal();
+  VideoMatrixState._internal();
 
   // ---------- 通道映射状态 ----------
 

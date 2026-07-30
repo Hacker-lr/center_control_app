@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中控系统 App 功能介绍</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #0D1117;
+            color: #D4C5A9;
+            overflow: hidden;
+        }
+        .slides-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        .slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 60px 80px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        }
+        .slide.active {
+            opacity: 1;
+            transform: translateX(0);
+            pointer-events: all;
+        }
+        .slide.prev {
+            transform: translateX(-100%);
+        }
+        
+        /* 封面 */
+        .cover .logo {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #1F4068 0%, #3E6B48 100%);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(31, 64, 104, 0.4);
+        }
+        .cover h1 {
+            font-size: 56px;
+            font-weight: 700;
+            letter-spacing: 8px;
+            margin-bottom: 20px;
+            background: linear-gradient(90deg, #D4C5A9, #8B949E);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .cover .subtitle {
+            font-size: 24px;
+            color: #8B949E;
+            letter-spacing: 4px;
+        }
+        .cover .version {
+            margin-top: 60px;
+            padding: 12px 32px;
+            background: rgba(31, 64, 104, 0.3);
+            border: 1px solid #1F4068;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #8B949E;
+        }
+        
+        /* 内容页通用 */
+        .content-slide h2 {
+            font-size: 42px;
+            font-weight: 600;
+            margin-bottom: 50px;
+            text-align: center;
+            position: relative;
+        }
+        .content-slide h2::after {
+            content: '';
+            position: absolute;
+            bottom: -16px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 3px;
+            background: linear-gradient(90deg, #1F4068, #3E6B48);
+            border-radius: 2px;
+        }
+        
+        /* 特性卡片 */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            width: 100%;
+            max-width: 1000px;
+        }
+        .feature-card {
+            background: rgba(22, 27, 34, 0.8);
+            border: 1px solid #30363D;
+            border-radius: 16px;
+            padding: 32px;
+            transition: all 0.3s;
+        }
+        .feature-card:hover {
+            border-color: #1F4068;
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        }
+        .feature-card .icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #1F4068, #2D5A8E);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        .feature-card h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #D4C5A9;
+        }
+        .feature-card p {
+            font-size: 14px;
+            color: #8B949E;
+            line-height: 1.6;
+        }
+        
+        /* 设备控制页 */
+        .device-list {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            width: 100%;
+            max-width: 800px;
+        }
+        .device-item {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            background: rgba(22, 27, 34, 0.6);
+            border: 1px solid #30363D;
+            border-radius: 16px;
+            padding: 28px 36px;
+            transition: all 0.3s;
+        }
+        .device-item:hover {
+            border-color: #3E6B48;
+            background: rgba(62, 107, 72, 0.1);
+        }
+        .device-item .device-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #1F4068, #3E6B48);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            flex-shrink: 0;
+        }
+        .device-item .device-info {
+            flex: 1;
+        }
+        .device-item h3 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .device-item .tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .device-item .tag {
+            padding: 4px 12px;
+            background: rgba(31, 64, 104, 0.3);
+            border: 1px solid #1F4068;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #8B949E;
+        }
+        
+        /* 技术架构页 */
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            width: 100%;
+            max-width: 900px;
+        }
+        .tech-item {
+            text-align: center;
+            padding: 40px 24px;
+            background: rgba(22, 27, 34, 0.6);
+            border: 1px solid #30363D;
+            border-radius: 16px;
+        }
+        .tech-item .tech-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        .tech-item h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .tech-item p {
+            font-size: 13px;
+            color: #8B949E;
+        }
+        
+        /* 流程图 */
+        .flow-chart {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .flow-box {
+            background: rgba(31, 64, 104, 0.3);
+            border: 2px solid #1F4068;
+            border-radius: 12px;
+            padding: 20px 28px;
+            text-align: center;
+            min-width: 140px;
+        }
+        .flow-box .flow-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .flow-box .flow-desc {
+            font-size: 12px;
+            color: #8B949E;
+        }
+        .flow-arrow {
+            font-size: 24px;
+            color: #3E6B48;
+        }
+        
+        /* 配置页面展示 */
+        .config-showcase {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            width: 100%;
+            max-width: 900px;
+        }
+        .config-item {
+            background: rgba(22, 27, 34, 0.6);
+            border: 1px solid #30363D;
+            border-radius: 12px;
+            padding: 24px;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .config-item .config-num {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #1F4068, #3E6B48);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .config-item h4 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .config-item p {
+            font-size: 13px;
+            color: #8B949E;
+            line-height: 1.5;
+        }
+        
+        /* 总结页 */
+        .summary-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            max-width: 700px;
+        }
+        .summary-item {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-size: 20px;
+        }
+        .summary-item .check {
+            width: 32px;
+            height: 32px;
+            background: #3E6B48;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        
+        /* 导航 */
+        .nav {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            z-index: 100;
+        }
+        .nav button {
+            width: 48px;
+            height: 48px;
+            background: rgba(22, 27, 34, 0.9);
+            border: 1px solid #30363D;
+            border-radius: 50%;
+            color: #D4C5A9;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .nav button:hover {
+            background: #1F4068;
+            border-color: #1F4068;
+        }
+        .page-indicator {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+        .page-indicator .dot {
+            width: 8px;
+            height: 8px;
+            background: #30363D;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+        .page-indicator .dot.active {
+            background: #3E6B48;
+            width: 24px;
+            border-radius: 4px;
+        }
+        
+        /* 页脚 */
+        .slide-footer {
+            position: absolute;
+            bottom: 24px;
+            right: 40px;
+            font-size: 12px;
+            color: #8B949E;
+        }
+        
+        /* 键盘提示 */
+        .keyboard-hint {
+            position: fixed;
+            top: 20px;
+            right: 30px;
+            font-size: 12px;
+            color: #8B949E;
+            z-index: 100;
+            opacity: 0.6;
+        }
+        
+        @media print {
+            .slide {
+                position: relative;
+                opacity: 1;
+                transform: none;
+                page-break-after: always;
+                height: 100vh;
+            }
+            .nav, .page-indicator, .keyboard-hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="keyboard-hint">← → 方向键或点击按钮翻页</div>
+    
+    <div class="slides-container">
+        <!-- 第1页：封面 -->
+        <div class="slide cover active">
+            <div class="logo">🎛️</div>
+            <h1>中控系统 App</h1>
+            <div class="subtitle">基于 Flutter 的跨平台设备集中控制系统</div>
+            <div class="version">v1.0.0 | 2026</div>
+        </div>
+        
+        <!-- 第2页：系统概述 -->
+        <div class="slide content-slide">
+            <h2>系统概述</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="icon">📱</div>
+                    <h3>跨平台</h3>
+                    <p>基于 Flutter 开发，一套代码同时支持 Android、iOS、Web 及桌面端，响应式布局自适应各种屏幕尺寸</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🌐</div>
+                    <h3>双协议通信</h3>
+                    <p>支持 TCP 和 UDP 两种网络协议，每种设备可独立选择，适配不同品牌设备的通信需求</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">⚙️</div>
+                    <h3>品牌配置</h3>
+                    <p>内置多种设备品牌模板，选择品牌后自动填充协议、端口和控制指令，开发者只需修改 IP</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">💾</div>
+                    <h3>持久化存储</h3>
+                    <p>所有配置参数、自定义名称自动保存到本地，重启后保持，无需重复设置</p>
+                </div>
+            </div>
+            <div class="slide-footer">中控系统 App 功能介绍</div>
+        </div>
+        
+        <!-- 第3页：设备控制 -->
+        <div class="slide content-slide">
+            <h2>四大设备控制</h2>
+            <div class="device-list">
+                <div class="device-item">
+                    <div class="device-icon">⚡</div>
+                    <div class="device-info">
+                        <h3>时序电源控制</h3>
+                        <div class="tags">
+                            <span class="tag">远程开关</span>
+                            <span class="tag">TCP/UDP</span>
+                            <span class="tag">状态反馈</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="device-item">
+                    <div class="device-icon">📺</div>
+                    <div class="device-info">
+                        <h3>大屏拼接器控制</h3>
+                        <div class="tags">
+                            <span class="tag">分屏切换</span>
+                            <span class="tag">可视化预览</span>
+                            <span class="tag">输入绑定</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="device-item">
+                    <div class="device-icon">🎬</div>
+                    <div class="device-info">
+                        <h3>视频矩阵控制</h3>
+                        <div class="tags">
+                            <span class="tag">输入/输出绑定</span>
+                            <span class="tag">长按改名</span>
+                            <span class="tag">分页显示</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="device-item">
+                    <div class="device-icon">📹</div>
+                    <div class="device-info">
+                        <h3>摄像头控制</h3>
+                        <div class="tags">
+                            <span class="tag">Sony VISCA</span>
+                            <span class="tag">云台控制</span>
+                            <span class="tag">预置位管理</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">中控系统 App 功能介绍</div>
+        </div>
+        
+        <!-- 第4页：交互特性 -->
+        <div class="slide content-slide">
+            <h2>核心交互特性</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="icon">👆</div>
+                    <h3>长按改名</h3>
+                    <p>视频矩阵输入/输出通道、摄像头选择按钮、预置位按钮均支持长按 2 秒触发重命名，按钮文字自适应缩放</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🔄</div>
+                    <h3>实时状态同步</h3>
+                    <p>多页面共享矩阵输入/输出绑定状态，通过单例 ChangeNotifier 实现实时同步更新</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🔌</div>
+                    <h3>自动重连</h3>
+                    <p>设备断线后自动重连，带心跳检测机制，确保控制指令可靠送达</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">📐</div>
+                    <h3>响应式布局</h3>
+                    <p>自适应手机、平板、桌面设备，支持横竖屏切换，按钮尺寸动态计算</p>
+                </div>
+            </div>
+            <div class="slide-footer">中控系统 App 功能介绍</div>
+        </div>
+        
+        <!-- 第5页：调试配置 -->
+        <div class="slide content-slide">
+            <h2>调试配置系统</h2>
+            <div style="text-align: center; margin-bottom: 40px; color: #8B949E; font-size: 16px;">
+                长按顶部标题"欢迎使用中控"进入配置页面
+            </div>
+            <div class="config-showcase">
+                <div class="config-item">
+                    <div class="config-num">1</div>
+                    <div>
+                        <h4>设备参数配置</h4>
+                        <p>修改所有受控设备的 IP 地址、端口号、通信协议</p>
+                    </div>
+                </div>
+                <div class="config-item">
+                    <div class="config-num">2</div>
+                    <div>
+                        <h4>品牌选择</h4>
+                        <p>选择设备品牌后自动填充协议、端口和控制指令</p>
+                    </div>
+                </div>
+                <div class="config-item">
+                    <div class="config-num">3</div>
+                    <div>
+                        <h4>通道数量设置</h4>
+                        <p>自定义矩阵输入/输出通道数、摄像机个数、预置位数量</p>
+                    </div>
+                </div>
+                <div class="config-item">
+                    <div class="config-num">4</div>
+                    <div>
+                        <h4>页面显示开关</h4>
+                        <p>控制各功能页面的显示/隐藏，按需启用控制模块</p>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">中控系统 App 功能介绍</div>
+        </div>
+        
+        <!-- 第6页：技术架构 -->
+        <div class="slide content-slide">
+            <h2>技术架构</h2>
+            <div class="tech-stack">
+                <div class="tech-item">
+                    <div class="tech-icon">💙</div>
+                    <h3>Flutter</h3>
+                    <p>跨平台 UI 框架<br>Dart 语言开发</p>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">📡</div>
+                    <h3>TCP/UDP</h3>
+                    <p>双协议网络通信<br>支持 ASCII/Hex 指令</p>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">💾</div>
+                    <h3>SharedPreferences</h3>
+                    <p>本地持久化存储<br>配置自动保存</p>
+                </div>
+            </div>
+            <div class="flow-chart" style="margin-top: 50px;">
+                <div class="flow-box">
+                    <div class="flow-title">Flutter App</div>
+                    <div class="flow-desc">UI 交互层</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-box">
+                    <div class="flow-title">DeviceConfig</div>
+                    <div class="flow-desc">配置中心</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-box">
+                    <div class="flow-title">BaseConnection</div>
+                    <div class="flow-desc">网络连接层</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-box">
+                    <div class="flow-title">硬件设备</div>
+                    <div class="flow-desc">电源/矩阵/大屏</div>
+                </div>
+            </div>
+            <div class="slide-footer">中控系统 App 功能介绍</div>
+        </div>
+        
+        <!-- 第7页：功能总结 -->
+        <div class="slide content-slide">
+            <h2>功能清单</h2>
+            <div class="summary-list">
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>时序电源远程开关控制（TCP/UDP 双协议）</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>大屏拼接器分屏模式切换（全屏/二分/三分/四分/五分）</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>视频矩阵输入/输出通道绑定与分页显示</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>摄像头云台控制与预置位管理（Sony VISCA 协议）</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>设备品牌配置（协议/端口/指令自动填充）</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>页面显示开关控制（按需启用功能模块）</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>通道/预置位长按改名（文字自适应缩放）</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>调试配置页面（IP/端口/通道数/预置位数）</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>自动重连与心跳检测（断线自动恢复）</span>
+                </div>
+                <div class="summary-item">
+                    <div class="check">✓</div>
+                    <span>响应式布局（自适应手机/平板/桌面）</span>
+                </div>
+            </div>
+            <div class="slide-footer">中控系统 App 功能介绍</div>
+        </div>
+        
+        <!-- 第8页：结束 -->
+        <div class="slide cover">
+            <div class="logo" style="font-size: 64px;">🎛️</div>
+            <h1 style="font-size: 48px;">感谢观看</h1>
+            <div class="subtitle" style="margin-top: 30px;">中控系统 App v1.0.0</div>
+            <div style="margin-top: 60px; padding: 20px 40px; background: rgba(31, 64, 104, 0.2); border: 1px solid #1F4068; border-radius: 12px; text-align: center;">
+                <div style="font-size: 14px; color: #8B949E; margin-bottom: 8px;">技术栈</div>
+                <div style="font-size: 18px; color: #D4C5A9;">Flutter + Dart + TCP/UDP + SharedPreferences</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="page-indicator">
+        <div class="dot active"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+    </div>
+    
+    <div class="nav">
+        <button onclick="prevSlide()">←</button>
+        <button onclick="nextSlide()">→</button>
+    </div>
+    
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const dots = document.querySelectorAll('.dot');
+        const totalSlides = slides.length;
+        
+        function updateSlides() {
+            slides.forEach((slide, index) => {
+                slide.classList.remove('active', 'prev');
+                if (index === currentSlide) {
+                    slide.classList.add('active');
+                } else if (index < currentSlide) {
+                    slide.classList.add('prev');
+                }
+            });
+            dots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentSlide);
+            });
+        }
+        
+        function nextSlide() {
+            if (currentSlide < totalSlides - 1) {
+                currentSlide++;
+                updateSlides();
+            }
+        }
+        
+        function prevSlide() {
+            if (currentSlide > 0) {
+                currentSlide--;
+                updateSlides();
+            }
+        }
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+        
+        // 触摸滑动支持
+        let touchStartX = 0;
+        let touchEndX = 0;
+        
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        });
+        
+        document.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            const diff = touchStartX - touchEndX;
+            if (Math.abs(diff) > 50) {
+                if (diff > 0) nextSlide();
+                else prevSlide();
+            }
+        });
+    </script>
+</body>
+</html>

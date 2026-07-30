@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'services/device_connection.dart';
-import 'services/matrix_connection.dart';
-import 'services/big_screen_connection.dart';
+import 'services/video_matrix_connection.dart';
 import 'services/camera_connection.dart';
+import 'services/crestron_cip_connection.dart';
 import 'services/device_config.dart';
 import 'pages/power_control_page.dart';
 import 'pages/big_screen_page.dart';
 import 'pages/video_matrix_page.dart';
 import 'pages/camera_control_page.dart';
-import 'pages/debug_config_page.dart';
+import 'pages/crestron_page.dart';
+import 'pages/system_config_page.dart';
 
 /// ============================================================
 /// 中控系统应用入口
@@ -101,11 +102,16 @@ class _MainPageState extends State<MainPage> {
   int _currentIndex = 0;
   final PageController _pageController = PageController(initialPage: 0);
 
+  /// 记录上一次的 Crestron 双模式状态，用于检测开关变化以连接/断开全局 CIP
+  bool _crestronModeActive = false;
+
   final DeviceConfig _config = DeviceConfig();
-  final DeviceConnection _deviceConnection = DeviceConnection();
-  final BigScreenConnection _bigScreenConnection = BigScreenConnection();
-  final MatrixConnection _matrixConnection = MatrixConnection();
+  final DeviceConnection _deviceConnection = DeviceConnection.timingPower;
+  final DeviceConnection _ledPowerConnection = DeviceConnection.ledPower;
+  final DeviceConnection _bigScreenConnection = DeviceConnection.bigScreen;
+  final VideoMatrixConnection _matrixConnection = VideoMatrixConnection();
   final CameraConnectionManager _cameraManager = CameraConnectionManager();
+  final CrestronCipConnection _cipConnection = CrestronCipConnection();
 
   /// 根据当前配置动态构建页面列表
   /// 每次调用都会重新读取 DeviceConfig 中的显示开关状态
@@ -119,8 +125,18 @@ class _MainPageState extends State<MainPage> {
           icon: Icons.bolt,
           label: '电源控制',
           page: const PowerControlPage(),
-          onConnect: () => _deviceConnection.connect(),
-          onDisconnect: () => _deviceConnection.disconnect(),
+          onConnect: _config.crestronMode
+              ? () {}
+              : () {
+                  _deviceConnection.connect();
+                  _ledPowerConnection.connect();
+                },
+          onDisconnect: _config.crestronMode
+              ? () {}
+              : () {
+                  _deviceConnection.disconnect();
+                  _ledPowerConnection.disconnect();
+                },
         ),
       );
     }
@@ -131,14 +147,18 @@ class _MainPageState extends State<MainPage> {
           icon: Icons.tv,
           label: '大屏控制',
           page: const BigScreenPage(),
-          onConnect: () {
-            _bigScreenConnection.connect();
-            _matrixConnection.connect();
-          },
-          onDisconnect: () {
-            _bigScreenConnection.disconnect();
-            _matrixConnection.disconnect();
-          },
+          onConnect: _config.crestronMode
+              ? () {}
+              : () {
+                  _bigScreenConnection.connect();
+                  _matrixConnection.connect();
+                },
+          onDisconnect: _config.crestronMode
+              ? () {}
+              : () {
+                  _bigScreenConnection.disconnect();
+                  _matrixConnection.disconnect();
+                },
         ),
       );
     }
@@ -149,8 +169,10 @@ class _MainPageState extends State<MainPage> {
           icon: Icons.videocam_outlined,
           label: '视频矩阵',
           page: const VideoMatrixPage(),
-          onConnect: () => _matrixConnection.connect(),
-          onDisconnect: () => _matrixConnection.disconnect(),
+          onConnect:
+              _config.crestronMode ? () {} : () => _matrixConnection.connect(),
+          onDisconnect:
+              _config.crestronMode ? () {} : () => _matrixConnection.disconnect(),
         ),
       );
     }
@@ -161,8 +183,26 @@ class _MainPageState extends State<MainPage> {
           icon: Icons.videocam,
           label: '摄像头',
           page: const CameraControlPage(),
-          onConnect: () => _cameraManager.connectCamera(1), // 进入页面时默认连接第1个摄像头
-          onDisconnect: () => _cameraManager.disconnectAll(), // 离开页面时断开所有摄像头
+          onConnect: _config.crestronMode
+              ? () {}
+              : () => _cameraManager.connectCamera(1), // 进入页面时默认连接第1个摄像头
+          onDisconnect: _config.crestronMode
+              ? () {}
+              : () => _cameraManager.disconnectAll(), // 离开页面时断开所有摄像头
+        ),
+      );
+    }
+
+    if (_config.showCrestronControl) {
+      entries.add(
+        _PageEntry(
+          icon: Icons.memory,
+          label: 'Crestron',
+          page: const CrestronPage(),
+          // Crestron 模式下 CIP 由全局统一管理，本页不再重复开关
+          onConnect: _config.crestronMode ? () {} : () => _cipConnection.connect(),
+          onDisconnect:
+              _config.crestronMode ? () {} : () => _cipConnection.disconnect(),
         ),
       );
     }
@@ -178,6 +218,29 @@ class _MainPageState extends State<MainPage> {
   /// 用于在配置页面修改开关后，返回主页面时自动刷新页面列表
   void _onConfigChanged() {
     if (!mounted) return;
+
+    // 检测 Crestron 双模式开关变化：开启则全局连接 CIP，关闭则断开并恢复当前页直连
+    // 注意：配置从 SharedPreferences 异步恢复完成时也会走到这里
+    // （App 重启后 crestronMode=true 的场景依赖此分支建立全局 CIP 连接）
+    if (_config.crestronMode != _crestronModeActive) {
+      _crestronModeActive = _config.crestronMode;
+      if (_crestronModeActive) {
+        // 切入中控模式：先断开启动早期可能已按“直连模式”建立的设备连接，
+        // 避免它们在后台反复重连刷错误日志
+        _deviceConnection.disconnect();
+        _ledPowerConnection.disconnect();
+        _bigScreenConnection.disconnect();
+        _matrixConnection.disconnect();
+        _cameraManager.disconnectAll();
+        _cipConnection.connect();
+      } else {
+        _cipConnection.disconnect();
+        // 关闭后让当前页按“直连模式”重新建立对应设备连接
+        if (_pageCount > 0 && _currentIndex < _pageCount) {
+          _pageEntries[_currentIndex].onConnect();
+        }
+      }
+    }
 
     // 确保当前索引在有效范围内
     final int count = _pageCount;
@@ -204,9 +267,15 @@ class _MainPageState extends State<MainPage> {
     super.initState();
     // 注册配置变化监听器，配置页面修改后返回时能自动刷新
     _config.addListener(_onConfigChanged);
+    // 记录初始双模式状态
+    _crestronModeActive = _config.crestronMode;
     if (_pageCount == 0) {
       debugPrint('[主页面] 警告：没有启用的页面！请在 DeviceConfig 中设置 showXxx = true');
       return;
+    }
+    // Crestron 双模式下，全局维持 CIP 连接，使任意页面的按钮都能发 join
+    if (_crestronModeActive) {
+      _cipConnection.connect();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _pageEntries[_currentIndex].onConnect();
@@ -214,8 +283,9 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _switchToPage(int newIndex) {
-    if (_currentIndex == newIndex || newIndex < 0 || newIndex >= _pageCount)
+    if (_currentIndex == newIndex || newIndex < 0 || newIndex >= _pageCount) {
       return;
+    }
 
     _pageEntries[_currentIndex].onDisconnect();
     _pageEntries[newIndex].onConnect();
@@ -225,8 +295,8 @@ class _MainPageState extends State<MainPage> {
     if (_pageController.hasClients) {
       _pageController.animateToPage(
         newIndex,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutExpo,
       );
     }
   }
@@ -263,7 +333,26 @@ class _MainPageState extends State<MainPage> {
         controller: _pageController,
         physics: const NeverScrollableScrollPhysics(),
         allowImplicitScrolling: true,
-        children: _pageEntries.map((e) => e.page).toList(),
+        children: _pageEntries.asMap().entries.map((entry) {
+          final int index = entry.key;
+          return AnimatedBuilder(
+            key: ObjectKey(entry.value.page),
+            animation: _pageController,
+            builder: (context, child) {
+              // 根据页面滚动进度计算当前页与相邻页的相对偏移量
+              final double page = _pageController.page ?? index.toDouble();
+              final double offset = (page - index).abs();
+              // 新页进入时从 0.96 轻微放大到 1.0，同时淡入；离开页反向收小并淡出
+              final double scale = (1.0 - offset * 0.04).clamp(0.92, 1.0);
+              final double opacity = (1.0 - offset * 0.3).clamp(0.7, 1.0);
+              return Transform.scale(
+                scale: scale,
+                child: Opacity(opacity: opacity, child: child),
+              );
+            },
+            child: entry.value.page,
+          );
+        }).toList(),
       ),
       bottomNavigationBar: _buildBottomNavBar(),
     );
@@ -275,7 +364,46 @@ class _MainPageState extends State<MainPage> {
         onLongPress: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const DebugConfigPage()),
+            PageRouteBuilder(
+              transitionDuration: const Duration(milliseconds: 550),
+              reverseTransitionDuration: const Duration(milliseconds: 450),
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  const SystemConfigPage(),
+              transitionsBuilder: (
+                context,
+                animation,
+                secondaryAnimation,
+                child,
+              ) {
+                // 进场：从下方明显滑入(1/4屏) + 轻微放大浮现 + 平缓渐显，避免对全屏页面而言太微弱；返回时自动反向
+                final slide = Tween<Offset>(
+                  begin: const Offset(0, 0.25),
+                  end: Offset.zero,
+                ).animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ),
+                );
+                final fade = CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeInOut,
+                );
+                final scale = Tween<double>(begin: 0.95, end: 1.0).animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ),
+                );
+                return FadeTransition(
+                  opacity: fade,
+                  child: SlideTransition(
+                    position: slide,
+                    child: ScaleTransition(scale: scale, child: child),
+                  ),
+                );
+              },
+            ),
           );
         },
         child: const Text(

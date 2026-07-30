@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import '../services/matrix_connection.dart';
+import '../services/video_matrix_connection.dart';
 import '../services/device_config.dart';
 import '../services/base_connection.dart';
-import '../services/matrix_state.dart';
+import '../services/crestron_cip_connection.dart';
+import '../services/video_matrix_state.dart';
 import '../services/channel_name_manager.dart';
 import '../widgets/channel_button.dart';
 import '../widgets/channel_button_grid.dart';
 import '../widgets/section_card.dart';
+import '../widgets/crestron_status_chip.dart';
 import '../utils/responsive_utils.dart';
-import '../utils/rename_dialog.dart';
+import '../utils/channel_rename_dialog.dart';
 
 /// 视频矩阵控制页面
 ///
@@ -34,16 +36,19 @@ class VideoMatrixPage extends StatefulWidget {
 
 class _VideoMatrixPageState extends State<VideoMatrixPage> {
   /// 矩阵状态管理，用于存储输入输出通道的绑定关系和选中状态
-  final MatrixState _matrixState = MatrixState();
+  final VideoMatrixState _matrixState = VideoMatrixState();
 
   /// 矩阵设备连接管理，负责与硬件设备的通信和连接状态监控
-  final MatrixConnection _matrixConnection = MatrixConnection();
+  final VideoMatrixConnection _matrixConnection = VideoMatrixConnection();
 
   /// 通道名称管理器，负责管理输入输出通道的自定义名称
   final ChannelNameManager _nameManager = ChannelNameManager();
 
   /// 设备配置实例，提供矩阵通道数量、命令格式等配置
   final DeviceConfig _config = DeviceConfig();
+
+  /// Crestron CIP 连接（单例，Crestron 模式下按钮发 join 给中控）
+  final CrestronCipConnection _cip = CrestronCipConnection();
 
   /// 获取矩阵输入通道数量，从设备配置中读取
   int get _inputCount => _config.matrixInputCount;
@@ -61,10 +66,14 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       // 合并多个 Listenable，任一状态变化都会触发重建
+      // 注意：必须包含 _config（DeviceConfig 单例），否则在配置页修改
+      // 矩阵通道数后返回本页时不会立即刷新，需重新点击底部菜单才会重建
       listenable: Listenable.merge([
         _matrixConnection,
         _matrixState,
         _nameManager,
+        _config,
+        _cip,
       ]),
       builder: (context, child) {
         return SafeArea(
@@ -186,8 +195,11 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
   /// 包括：已连接、连接中、连接失败、未连接四种状态。
   /// 当设备连接成功时，还会显示心跳计数。
   Widget _buildConnectionStatusIndicator() {
-    // 获取当前连接状态
-    final status = _matrixConnection.status;
+    // Crestron 模式下统一使用全局 Crestron 状态芯片
+    if (_config.crestronMode) {
+      return const CrestronStatusChip();
+    }
+    final ConnectionStatus status = _matrixConnection.status;
 
     // 默认状态：未连接
     String statusText = '矩阵设备未连接';
@@ -357,6 +369,12 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
   void _onInputChannelTapped(int channelNumber) {
     // 更新选中的输入通道，触发 UI 刷新以高亮显示选中状态
     _matrixState.selectInput(channelNumber);
+
+    // Crestron VTP 模式：输入通道 X → 数字 join = joinMatrixInputBase + X 脉冲
+    // 中控程序据此记录"最后按下的输入"，与真实 Crestron 面板行为一致
+    if (_config.crestronMode) {
+      _cip.pulse(_config.joinMatrixInputBase + channelNumber);
+    }
   }
 
   /// 输出通道点击事件处理
@@ -393,6 +411,13 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
     final int? previousInput = _matrixState.getBoundInput(channelNumber);
     // 更新矩阵状态：将该输出通道绑定到当前选中的输入通道
     _matrixState.bindOutput(channelNumber, selectedInput);
+
+    // Crestron VTP 模式：输出通道 Y → 数字 join = joinMatrixOutputBase + Y 脉冲
+    // 中控程序收到后，将"最后按下的输入"路由到该输出（路由逻辑在 SIMPL 中实现）
+    if (_config.crestronMode) {
+      _cip.pulse(_config.joinMatrixOutputBase + channelNumber);
+      return;
+    }
 
     // 根据配置生成控制命令（支持十六进制和 ASCII 两种格式）
     final String command;

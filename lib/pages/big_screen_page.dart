@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
-import '../services/big_screen_connection.dart';
-import '../services/matrix_connection.dart';
+import '../services/device_connection.dart';
+import '../services/video_matrix_connection.dart';
 import '../services/device_config.dart';
 import '../services/base_connection.dart';
-import '../services/matrix_state.dart';
+import '../services/crestron_cip_connection.dart';
+import '../services/video_matrix_state.dart';
 import '../services/channel_name_manager.dart';
 import '../widgets/channel_button.dart';
 import '../widgets/channel_button_grid.dart';
 import '../widgets/section_card.dart';
+import '../widgets/crestron_status_chip.dart';
 import '../utils/responsive_utils.dart';
-import '../utils/rename_dialog.dart';
+import '../utils/channel_rename_dialog.dart';
 
 /// ============================================================
 /// 大屏控制页面
 /// 布局：上方分屏预览 → 中间分屏模式按钮 → 下方输入按钮阵列
-/// 分屏按钮→拼接器发指令，输入/输出绑定→矩阵发指令（通过 MatrixState 共享状态）
+/// 分屏按钮→拼接器发指令，输入/输出绑定→矩阵发指令（通过 VideoMatrixState 共享状态）
 /// ============================================================
 class BigScreenPage extends StatefulWidget {
   /// 大屏控制页面，用于控制拼接器分屏模式和矩阵输入输出绑定
@@ -46,19 +48,22 @@ class _BigScreenPageState extends State<BigScreenPage> {
   int _selectedAreaIndex = -1;
 
   /// 矩阵状态管理器，用于管理输入输出绑定关系和选中状态
-  final MatrixState _matrixState = MatrixState();
+  final VideoMatrixState _matrixState = VideoMatrixState();
 
-  /// 拼接器连接管理，负责与拼接器设备的通信
-  final BigScreenConnection _bigScreenConnection = BigScreenConnection();
+  /// 拼接器连接管理（DeviceProfile.bigScreen），负责与拼接器设备的通信
+  final DeviceConnection _bigScreenConnection = DeviceConnection.bigScreen;
 
   /// 矩阵连接管理，负责与矩阵设备的通信
-  final MatrixConnection _matrixConnection = MatrixConnection();
+  final VideoMatrixConnection _matrixConnection = VideoMatrixConnection();
 
   /// 通道名称管理器，负责输入/输出通道的自定义命名
   final ChannelNameManager _nameManager = ChannelNameManager();
 
   /// 设备配置实例，提供运行时配置参数
   final DeviceConfig _config = DeviceConfig();
+
+  /// Crestron CIP 连接（单例，Crestron 模式下按钮发 join 给中控）
+  final CrestronCipConnection _cip = CrestronCipConnection();
 
   /// 获取矩阵输入通道总数，从设备配置中读取
   int get _inputCount => _config.matrixInputCount;
@@ -106,6 +111,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
         _matrixConnection,
         _matrixState,
         _nameManager,
+        _cip,
       ]),
       builder: (context, child) {
         /// 页面根布局结构：
@@ -171,6 +177,13 @@ class _BigScreenPageState extends State<BigScreenPage> {
   /// 在页面顶部居中显示两个状态芯片：左侧显示拼接器状态，右侧显示矩阵状态
   /// 状态变化时会自动更新显示内容
   Widget _buildConnectionStatusIndicator() {
+    // Crestron 模式下统一使用全局 Crestron 状态芯片
+    if (_config.crestronMode) {
+      return const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [CrestronStatusChip()],
+      );
+    }
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -263,8 +276,8 @@ class _BigScreenPageState extends State<BigScreenPage> {
   /// - Positioned + AnimatedContainer：每个分屏区域，带有动画效果
   Widget _buildSplitScreenPreview() {
     /// 获取当前分屏模式对应的区域数量
-    final int areaCount =
-        _layoutAreaCounts[_layoutButtonEntries[_currentLayoutIndex].key];
+    final int layoutKey = _layoutButtonEntries[_currentLayoutIndex].key;
+    final int areaCount = _layoutAreaCounts[layoutKey];
 
     return Container(
       width: double.infinity,
@@ -286,6 +299,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
                 areaCount,
                 constraints.maxWidth,
                 constraints.maxHeight,
+                isFull169: layoutKey == 1,
               );
 
               /// 获取该输出通道已绑定的输入通道号
@@ -341,7 +355,21 @@ class _BigScreenPageState extends State<BigScreenPage> {
                             ]
                           : null,
                     ),
-                    child: const Center(),
+                    child: Center(
+                      child: Text(
+                        '区域${areaIndex + 1}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: isHighlighted
+                              ? Colors.white
+                              : Colors.grey[300],
+                          letterSpacing: 0.5,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ),
                   ),
                 ),
               );
@@ -368,16 +396,24 @@ class _BigScreenPageState extends State<BigScreenPage> {
     int areaIndex,
     int areaCount,
     double totalW,
-    double totalH,
-  ) {
+    double totalH, {
+    bool isFull169 = false,
+  }) {
     /// 分屏区域之间的间距，从配置中读取
     const double gap = DeviceConfig.splitAreaGap;
 
     /// 根据分屏区域总数选择对应的布局算法
     switch (areaCount) {
       /// ============ 全屏模式（1个区域） ============
-      /// 单个区域占满整个容器，无需计算间距
+      /// 单个区域占满整个容器；全屏16:9 模式额外将宽度缩窄并水平居中，
+      /// 使其与满宽的全屏区域在视觉上区分开
       case 1:
+        if (isFull169) {
+          const double widthRatio = 0.88; // 16:9 区域宽度占满宽比例，越小越窄
+          final double w = totalW * widthRatio;
+          final double left = (totalW - w) / 2;
+          return Rect.fromLTWH(left, 0, w, totalH);
+        }
         return Rect.fromLTWH(0, 0, totalW, totalH);
 
       /// ============ 二分屏模式（2个区域） ============
@@ -701,6 +737,26 @@ class _BigScreenPageState extends State<BigScreenPage> {
     );
   }
 
+  /// 将分屏模式键值 (0-5) 映射到对应的独立 join 号
+  int _layoutJoin(int key) {
+    switch (key) {
+      case 0:
+        return _config.joinLayoutFull;
+      case 1:
+        return _config.joinLayoutFull169;
+      case 2:
+        return _config.joinLayoutSplit2;
+      case 3:
+        return _config.joinLayoutSplit3;
+      case 4:
+        return _config.joinLayoutSplit4;
+      case 5:
+        return _config.joinLayoutSplit5;
+      default:
+        return _config.joinLayoutFull;
+    }
+  }
+
   /// 分屏模式按钮点击事件处理
   ///
   /// 当用户点击分屏模式按钮时触发，执行以下操作：
@@ -720,6 +776,12 @@ class _BigScreenPageState extends State<BigScreenPage> {
 
     /// 计算分屏模式代码（键值+1，因为拼接器协议通常从1开始）
     final int layoutCode = layoutKey + 1;
+
+    // Crestron VTP 模式：每个分屏模式发送各自独立的数字 join 脉冲
+    if (_config.crestronMode) {
+      _cip.pulse(_layoutJoin(layoutKey));
+      return;
+    }
 
     /// 根据配置选择命令格式（十六进制或ASCII），替换命令模板中的占位符
     final String command = _config.bigScreenSendAsHex
@@ -773,6 +835,13 @@ class _BigScreenPageState extends State<BigScreenPage> {
     /// 更新本地矩阵状态：记录输入输出绑定关系
     _matrixState.bindOutput(outputChannel, selectedInput);
 
+    // Crestron VTP 模式：输出通道 Y → 数字 join = joinMatrixOutputBase + Y 脉冲
+    // 中控程序收到后，将"最后按下的输入"路由到该输出（路由逻辑在 SIMPL 中实现）
+    if (_config.crestronMode) {
+      _cip.pulse(_config.joinMatrixOutputBase + outputChannel);
+      return;
+    }
+
     /// 根据配置选择命令格式（十六进制或ASCII），替换命令模板中的占位符
     final String command = _config.matrixSendAsHex
         /// 十六进制模式：将输入和输出通道号转换为两位十六进制字符串
@@ -808,6 +877,12 @@ class _BigScreenPageState extends State<BigScreenPage> {
 
     /// 更新矩阵状态，选中该输入通道
     _matrixState.selectInput(channelNumber);
+
+    // Crestron VTP 模式：输入通道 X → 数字 join = joinMatrixInputBase + X 脉冲
+    // 中控程序据此记录"最后按下的输入"，与真实 Crestron 面板行为一致
+    if (_config.crestronMode) {
+      _cip.pulse(_config.joinMatrixInputBase + channelNumber);
+    }
   }
 
   /// 显示通道重命名对话框

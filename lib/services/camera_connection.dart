@@ -337,7 +337,8 @@ class CameraConnection extends BaseConnection {
   /// - value: 需要转换的整数（0-255）
   /// 
   /// 返回值：2位16进制字符串，如15转为"0F"，255转为"FF"
-  String _hex(int value) => value.toRadixString(16).padLeft(2, '0').toUpperCase();
+  // 复用基类统一的字节→十六进制格式化（避免与 CIP 等重复实现）
+  String _hex(int value) => BaseConnection.hexByte(value);
 }
 
 /// ============================================================
@@ -361,9 +362,13 @@ class CameraConnectionManager extends ChangeNotifier {
   final DeviceConfig _config = DeviceConfig();
 
   /// 私有构造函数，初始化所有摄像头连接实例
-  /// 
+  ///
   /// 从 DeviceConfig 中读取所有摄像头配置，为每个摄像头创建连接实例
-  /// 此时仅创建实例，不进行实际连接
+  /// 此时仅创建实例，不进行实际连接。
+  ///
+  /// ⚠️ 约束：连接实例在【首次访问时】按当时的 cameraDevices 固化。
+  /// 若在配置页增删摄像头后未重启 App，本管理器的 _connections 不会自动重建，
+  /// 新增/删除的摄像头不会生效（需重启或后续补充 rebuild 逻辑）。
   CameraConnectionManager._internal() {
     // 遍历所有配置的摄像头设备
     for (int i = 0; i < _config.cameraDevices.length; i++) {
