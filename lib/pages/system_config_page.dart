@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/device_config.dart';
+import '../services/camera_connection.dart';
 import '../widgets/config_form_widgets.dart';
 
 /// ============================================================
@@ -20,7 +21,7 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     with SingleTickerProviderStateMixin {
   final DeviceConfig _config = DeviceConfig();
 
-  // ---- 设备直连配置 ----
+  // ---- 受控设备配置 ----
   final TextEditingController _powerIpController = TextEditingController();
   final TextEditingController _powerPortController = TextEditingController();
   final TextEditingController _matrixIpController = TextEditingController();
@@ -90,6 +91,10 @@ class _SystemConfigPageState extends State<SystemConfigPage>
 
   /// 摄像头设备（直连 VISCA）控制器列表
   final List<Map<String, TextEditingController>> _cameraControllers = [];
+
+  /// 每个摄像头对应的协议标记：true=TCP，false=UDP
+  /// 与 _cameraControllers 一一对应
+  final List<bool> _cameraUseTcp = [];
 
   // ---- 状态 ----
   bool _crestronMode = false;
@@ -297,26 +302,30 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     _joinLedPowerOffController.text = '${_config.joinLedPowerOff}';
 
     _cameraControllers.clear();
+    _cameraUseTcp.clear();
     for (var device in _config.cameraDevices) {
       _cameraControllers.add({
         'ip': TextEditingController(text: device['ip']),
         'port': TextEditingController(text: '${device['port']}'),
         'viscaAddr': TextEditingController(text: '${device['viscaAddr']}'),
       });
+      _cameraUseTcp.add(device['useTcp'] == true);
     }
   }
 
   void _saveAll() {
     _config.setPowerDeviceIp(_powerIpController.text.trim());
     _config.setPowerDevicePort(
-      int.tryParse(_powerPortController.text.trim()) ?? ConfigDefaults.devicePort,
+      int.tryParse(_powerPortController.text.trim()) ??
+          ConfigDefaults.devicePort,
     );
     _config.setPowerUseTcp(_powerUseTcp);
     _config.setPowerSendAsHex(_powerSendAsHex);
     _config.setPowerBrand(_powerBrand);
     _config.setMatrixDeviceIp(_matrixIpController.text.trim());
     _config.setMatrixDevicePort(
-      int.tryParse(_matrixPortController.text.trim()) ?? ConfigDefaults.devicePort,
+      int.tryParse(_matrixPortController.text.trim()) ??
+          ConfigDefaults.devicePort,
     );
     _config.setMatrixUseTcp(_matrixUseTcp);
     _config.setMatrixSendAsHex(_matrixSendAsHex);
@@ -331,12 +340,14 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     );
     _config.setBigScreenDeviceIp(_bigScreenIpController.text.trim());
     _config.setBigScreenDevicePort(
-      int.tryParse(_bigScreenPortController.text.trim()) ?? ConfigDefaults.devicePort,
+      int.tryParse(_bigScreenPortController.text.trim()) ??
+          ConfigDefaults.devicePort,
     );
     _config.setBigScreenUseTcp(_bigScreenUseTcp);
     _config.setLedPowerDeviceIp(_ledPowerIpController.text.trim());
     _config.setLedPowerDevicePort(
-      int.tryParse(_ledPowerPortController.text.trim()) ?? ConfigDefaults.devicePort,
+      int.tryParse(_ledPowerPortController.text.trim()) ??
+          ConfigDefaults.devicePort,
     );
     _config.setLedPowerUseTcp(_ledPowerUseTcp);
     _config.setLedPowerSendAsHex(_ledPowerSendAsHex);
@@ -446,13 +457,18 @@ class _SystemConfigPageState extends State<SystemConfigPage>
       var ctrl = _cameraControllers[i];
       cameraDevices.add({
         'ip': ctrl['ip']?.text.trim() ?? '192.168.0.${64 + i}',
-        'port': int.tryParse(ctrl['port']?.text.trim() ??
-                '${ConfigDefaults.viscaPort}') ??
+        'port':
+            int.tryParse(
+              ctrl['port']?.text.trim() ?? '${ConfigDefaults.viscaPort}',
+            ) ??
             ConfigDefaults.viscaPort,
         'viscaAddr': int.tryParse(ctrl['viscaAddr']?.text.trim() ?? '1') ?? 1,
+        'useTcp': _cameraUseTcp[i],
       });
     }
     _config.setCameraDevices(cameraDevices);
+    // 摄像头配置变更后立即重建连接实例，免去重启 App 才能生效的限制
+    CameraConnectionManager().rebuild();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -480,6 +496,7 @@ class _SystemConfigPageState extends State<SystemConfigPage>
         'port': TextEditingController(text: '${ConfigDefaults.viscaPort}'),
         'viscaAddr': TextEditingController(text: '1'),
       });
+      _cameraUseTcp.add(true);
     });
   }
 
@@ -490,49 +507,123 @@ class _SystemConfigPageState extends State<SystemConfigPage>
       _cameraControllers[index]['port']?.dispose();
       _cameraControllers[index]['viscaAddr']?.dispose();
       _cameraControllers.removeAt(index);
+      _cameraUseTcp.removeAt(index);
     });
   }
 
-  /// 顶部 Crestron VTP 模式总开关（精简，无说明小字，无跳转）
-  Widget _buildModeCard() {
+  /// VTP 模式切换处理：仅写配置（持久化 + notifyListeners），
+  /// 真正的“断开直连/连 CIP”或“重建并连接各直连设备”由 MainPage 的
+  /// _onConfigChanged 监听统一执行——因此切换即生效，无需点保存。
+  void _onVtpModeChanged(bool v) {
+    setState(() => _crestronMode = v);
+    _config.setCrestronMode(v);
+    if (v) {
+      _vtpAnimCtrl.forward();
+    } else {
+      _vtpAnimCtrl.reverse();
+    }
+  }
+
+  /// 顶部 VTP 模式开关（美化版）：圆角胶囊背景 + 图标 + 文字 + 定制 Switch。
+  /// 开启时胶囊染 accent 浅色描边，关闭时灰阶；切换即生效（无需保存），
+  /// 真正的连接切换由 MainPage 的 _onConfigChanged 监听统一处理。
+  Widget _buildVtpSwitch() {
+    final bool on = _crestronMode;
+    final Color accent = DeviceConfig.colorAccent;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: DeviceConfig.colorDialogBg,
-        borderRadius: BorderRadius.circular(14),
+        color: on ? accent.withAlpha(26) : Colors.white.withAlpha(10),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: _crestronMode
-              ? DeviceConfig.colorAccent.withAlpha(160)
-              : DeviceConfig.colorAccent.withAlpha(70),
+          color: on ? accent.withAlpha(130) : Colors.white.withAlpha(28),
+          width: 1,
         ),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.view_quilt, color: DeviceConfig.colorAccent, size: 22),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Crestron VTP 模式',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
+          Icon(
+            on ? Icons.view_quilt : Icons.view_quilt_outlined,
+            size: 16,
+            color: on ? accent : Colors.white70,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'VTP',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: on ? accent : Colors.white70,
+              letterSpacing: 0.5,
             ),
           ),
+          const SizedBox(width: 4),
           Switch(
-            value: _crestronMode,
-            onChanged: (v) {
-              setState(() => _crestronMode = v);
-              _config.setCrestronMode(v);
-              if (v) {
-                _vtpAnimCtrl.forward();
-              } else {
-                _vtpAnimCtrl.reverse();
-              }
-            },
-            activeThumbColor: DeviceConfig.colorAccent,
+            value: on,
+            onChanged: _onVtpModeChanged,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            activeThumbColor: accent,
+            activeTrackColor: accent.withAlpha(120),
+            inactiveThumbColor: Colors.white70,
+            inactiveTrackColor: Colors.white.withAlpha(28),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 顶部“保存”按钮（美化版）：圆角胶囊，accent 浅底 + accent 文字/图标，
+  /// 与 VTP 开关同处一行右侧，明显区别于普通文本按钮。
+  Widget _buildSaveButton() {
+    final Color accent = DeviceConfig.colorAccent;
+    return TextButton.icon(
+      onPressed: _saveAll,
+      icon: Icon(Icons.save_outlined, size: 22, color: accent),
+      label: Text(
+        '保存',
+        style: TextStyle(
+          color: accent,
+          fontWeight: FontWeight.w700,
+          fontSize: 16,
+        ),
+      ),
+      style: TextButton.styleFrom(
+        backgroundColor: accent.withAlpha(18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        minimumSize: Size.zero,
+      ),
+    );
+  }
+
+  /// 分区标题：左侧 accent 竖条 + 图标 + 文字，用于把配置页分成多个视觉分区
+  /// （中控配置 / 设备直连配置 / 页面显示控制），使不同区域的菜单栏清晰隔开。
+  Widget _buildZoneHeader(String title, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16, bottom: 10),
+      padding: const EdgeInsets.only(left: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              color: DeviceConfig.colorAccent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(icon, size: 18, color: DeviceConfig.colorAccent),
+          const SizedBox(width: 6),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: 1,
+            ),
           ),
         ],
       ),
@@ -544,42 +635,42 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     return Scaffold(
       backgroundColor: DeviceConfig.colorCardBg,
       appBar: AppBar(
-        title: const Text(
-          '系统配置',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
+        // 增大工具栏高度，让顶部标题/开关/按钮整体下移、更宽松透气
+        toolbarHeight: 66,
         backgroundColor: DeviceConfig.colorCardBg,
         elevation: 0,
         centerTitle: true,
+        titleSpacing: 0,
+        title: const Text(
+          '系统配置',
+          style: TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            letterSpacing: 1,
+          ),
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, size: 22),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          TextButton.icon(
-            onPressed: _saveAll,
-            icon: const Icon(
-              Icons.save_outlined,
-              size: 18,
-              color: DeviceConfig.colorAccent,
-            ),
-            label: const Text(
-              '保存',
-              style: TextStyle(
-                color: DeviceConfig.colorAccent,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
+          // VTP 模式开关（美化胶囊样式）：与“保存”同处一行右侧，切换即生效
+          _buildVtpSwitch(),
+          const SizedBox(width: 6),
+          _buildSaveButton(),
+          const SizedBox(width: 12),
         ],
+        // 顶部与内容区的细分隔线，提升精致感
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: Colors.white.withAlpha(14)),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           children: [
-            _buildModeCard(),
-
             // ===== 中控相关（仅 VTP 模式显示；打开=空间先展开、菜单后淡入，关闭=菜单先淡出、空间后收起，互为镜像）=====
             AnimatedBuilder(
               animation: _vtpAnimCtrl,
@@ -598,6 +689,8 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                             key: const ValueKey('vtp_on'),
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              _buildZoneHeader('中控配置', Icons.hub),
+                              const SizedBox(height: 4),
                               buildGroupCard(
                                 title: '中控主机 (CIP/SCIP)',
                                 icon: Icons.memory,
@@ -734,7 +827,9 @@ class _SystemConfigPageState extends State<SystemConfigPage>
               },
             ),
 
-            // ===== 电源设备（时序电源 + 大屏电箱 PLC 整合为单一菜单栏，勾选显示也内置）=====
+            // ===== 受控设备配置（始终显示，与中控配置分区隔开）=====
+            _buildZoneHeader('受控设备配置', Icons.devices),
+            const SizedBox(height: 2),
             buildGroupCard(
               title: '电源设备',
               icon: Icons.bolt,
@@ -1046,6 +1141,9 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                   (entry) => buildCameraItem(
                     index: entry.key,
                     ctrl: entry.value,
+                    useTcp: _cameraUseTcp[entry.key],
+                    onUseTcpChanged: (v) =>
+                        setState(() => _cameraUseTcp[entry.key] = v),
                     onRemove: () => _removeCamera(entry.key),
                     canRemove: _cameraControllers.length > 1,
                     hideConnection: _crestronMode,
@@ -1078,6 +1176,9 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                 ),
               ],
             ),
+            // ===== 页面显示控制（单独分区，与设备直连区隔开）=====
+            _buildZoneHeader('页面显示控制', Icons.view_module),
+            const SizedBox(height: 2),
             buildGroupCard(
               title: '页面显示控制',
               icon: Icons.dashboard_customize,
@@ -1152,6 +1253,7 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                           onPressed: () {
                             _config.resetAll();
                             _loadConfig();
+                            CameraConnectionManager().rebuild();
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('配置已重置')),

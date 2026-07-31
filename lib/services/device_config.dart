@@ -176,11 +176,11 @@ class ConfigDefaults {
   // ---- 摄像头设备默认列表（IP / 端口 / VISCA 地址）----
   /// 列表长度即摄像头数量；选中时仅连接对应设备，其余断开
   static const List<Map<String, dynamic>> cameraDevices = [
-    {'ip': deviceIp, 'port': viscaPort, 'viscaAddr': 1},
-    {'ip': '192.168.0.65', 'port': viscaPort, 'viscaAddr': 1},
-    {'ip': '192.168.0.66', 'port': viscaPort, 'viscaAddr': 1},
-    {'ip': '192.168.0.67', 'port': viscaPort, 'viscaAddr': 1},
-    {'ip': '192.168.0.68', 'port': viscaPort, 'viscaAddr': 1},
+    {'ip': deviceIp, 'port': viscaPort, 'viscaAddr': 1, 'useTcp': true},
+    {'ip': '192.168.0.65', 'port': viscaPort, 'viscaAddr': 1, 'useTcp': true},
+    {'ip': '192.168.0.66', 'port': viscaPort, 'viscaAddr': 1, 'useTcp': true},
+    {'ip': '192.168.0.67', 'port': viscaPort, 'viscaAddr': 1, 'useTcp': true},
+    {'ip': '192.168.0.68', 'port': viscaPort, 'viscaAddr': 1, 'useTcp': true},
   ];
 
   // ---- 按钮网格布局 ----
@@ -197,7 +197,7 @@ class ConfigDefaults {
   // ---- 按钮交互 ----
   static const int longPressDurationMs = 2000;
   static const int longPressTickIntervalMs = 50;
-  static const int channelNameMaxLength = 10;
+  static const int channelNameMaxLength = 40;
 }
 
 /// ============================================================
@@ -244,7 +244,7 @@ class DeviceConfig extends ChangeNotifier {
   static final DeviceConfig _instance = DeviceConfig._internal();
   factory DeviceConfig() => _instance;
   DeviceConfig._internal() {
-    init(); // 启动时从 SharedPreferences 加载配置
+    ensureLoaded(); // 启动时从 SharedPreferences 加载配置（缓存 Future，可重复 await）
   }
 
   /// SharedPreferences 实例（用于持久化存储）
@@ -1550,8 +1550,22 @@ class DeviceConfig extends ChangeNotifier {
   /// 私有方法：初始化和持久化
   /// ============================================================
 
+  /// 配置初始化 Future（缓存，避免重复加载 SharedPreferences）
+  Future<void>? _initFuture;
+
+  /// 确保持久化配置已从磁盘加载完成。
+  ///
+  /// 返回同一个缓存的初始化 Future，可在多处安全地 await / .then；
+  /// 首次调用才真正执行加载，之后直接复用，不会重复读取 SharedPreferences。
+  /// 典型用途：摄像头连接管理器在构造时把配置固化（异步加载前），
+  /// 需在配置就绪后显式 rebuild，见 MainPage.initState。
+  Future<void> ensureLoaded() {
+    _initFuture ??= _doInit();
+    return _initFuture!;
+  }
+
   /// 初始化 SharedPreferences 并加载配置
-  Future<void> init() async {
+  Future<void> _doInit() async {
     try {
       if (_prefs == null) {
         _prefs = await SharedPreferences.getInstance();
@@ -2005,7 +2019,8 @@ class DeviceConfig extends ChangeNotifier {
   /// 摄像头列表序列化/反序列化
   void _saveCameraDevices() {
     final List<String> encoded = _cameraDevices.map((dev) {
-      return '${dev['ip']},${dev['port']},${dev['viscaAddr']}';
+      // 第4段为协议标记：1=TCP，0=UDP（默认 TCP 以兼容旧数据）
+      return '${dev['ip']},${dev['port']},${dev['viscaAddr']},${dev['useTcp'] == true ? 1 : 0}';
     }).toList();
     _prefs?.setStringList('${_keyPrefix}cameraDevices', encoded);
   }
@@ -2023,6 +2038,8 @@ class DeviceConfig extends ChangeNotifier {
               ? int.tryParse(parts[1]) ?? ConfigDefaults.viscaPort
               : ConfigDefaults.viscaPort,
           'viscaAddr': parts.length > 2 ? int.tryParse(parts[2]) ?? 1 : 1,
+          // 旧数据无第4段，回退为 TCP（true）以保持向后兼容
+          'useTcp': parts.length > 3 ? (parts[3] == '1') : true,
         };
       }).toList();
     }

@@ -328,6 +328,8 @@ Widget buildCameraItem({
   required bool canRemove,
   bool hideConnection = false,
   Animation<double>? connectionFade,
+  bool useTcp = true,
+  ValueChanged<bool>? onUseTcpChanged,
 }) {
   // VTP 开时（hideConnection=true）：随动画先淡出、过半后才收起空间；
   // VTP 关时：空间先展开、随后淡入。与时序电源等直连字段过渡保持一致。
@@ -464,6 +466,36 @@ Widget buildCameraItem({
                                 style: const TextStyle(fontSize: 13),
                               ),
                             ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Text(
+                            '协议',
+                            style: TextStyle(fontSize: 13, color: _hintColor),
+                          ),
+                          const SizedBox(width: 10),
+                          ToggleButtons(
+                            isSelected: [useTcp, !useTcp],
+                            onPressed: (int idx) {
+                              onUseTcpChanged?.call(idx == 0);
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            selectedColor: Colors.white,
+                            color: _hintColor,
+                            fillColor: DeviceConfig.colorAccent.withAlpha(180),
+                            borderColor: DeviceConfig.colorButtonBorder,
+                            selectedBorderColor: DeviceConfig.colorAccent,
+                            constraints: const BoxConstraints(
+                              minHeight: 32,
+                              minWidth: 56,
+                            ),
+                            children: const [
+                              Text('TCP', style: TextStyle(fontSize: 13)),
+                              Text('UDP', style: TextStyle(fontSize: 13)),
+                            ],
                           ),
                         ],
                       ),

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/camera_connection.dart';
 import '../services/device_config.dart';
@@ -102,9 +103,12 @@ class _CameraControlPageState extends State<CameraControlPage>
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // 判断是否横屏：宽度大于高度即为横屏
-                  final bool isLandscape = constraints.maxWidth > constraints.maxHeight;
+                  final bool isLandscape =
+                      constraints.maxWidth > constraints.maxHeight;
                   // 根据屏幕方向返回对应的布局
-                  return isLandscape ? _buildLandscapeLayout() : _buildPortraitLayout();
+                  return isLandscape
+                      ? _buildLandscapeLayout()
+                      : _buildPortraitLayout();
                 },
               ),
             ),
@@ -210,7 +214,10 @@ class _CameraControlPageState extends State<CameraControlPage>
 
   // ==================== 通用卡片组件 ====================
 
-  Widget _buildSectionCardExpandable({required String label, required Widget child}) {
+  Widget _buildSectionCardExpandable({
+    required String label,
+    required Widget child,
+  }) {
     return Container(
       padding: EdgeInsets.all(ResponsiveUtils.getSpacing(context, 8)),
       decoration: BoxDecoration(
@@ -286,9 +293,14 @@ class _CameraControlPageState extends State<CameraControlPage>
         children: [
           Icon(statusIcon, color: statusColor, size: 14),
           const SizedBox(width: 4),
-          Text(statusText,
-              style: TextStyle(
-                  fontSize: 11, color: statusColor, fontWeight: FontWeight.w500)),
+          Text(
+            statusText,
+            style: TextStyle(
+              fontSize: 11,
+              color: statusColor,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );
@@ -300,7 +312,8 @@ class _CameraControlPageState extends State<CameraControlPage>
   /// 点击时互斥切换连接：选中新摄像头，断开旧摄像头
   /// 支持长按改名，文字自适应缩放
   Widget _buildCameraSelection() {
-    final double btnSize = ResponsiveUtils.getChannelButtonSize(context);
+    // 摄像头选择按钮按用户要求缩小：在基准尺寸上乘 0.8
+    final double btnSize = ResponsiveUtils.getChannelButtonSize(context) * 0.8;
     final double spacing = ResponsiveUtils.getSpacing(context, 8);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -326,7 +339,8 @@ class _CameraControlPageState extends State<CameraControlPage>
   /// 横屏摄像头选择（紧凑排列）
   /// 支持长按改名，文字自适应缩放
   Widget _buildCameraSelectionLandscape() {
-    final double btnSize = ResponsiveUtils.getChannelButtonSize(context) * 0.85;
+    // 横屏紧凑排列：在竖屏 0.8 基础上再乘 0.85（=0.68）
+    final double btnSize = ResponsiveUtils.getChannelButtonSize(context) * 0.68;
     final double spacing = ResponsiveUtils.getSpacing(context, 6);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -364,46 +378,62 @@ class _CameraControlPageState extends State<CameraControlPage>
   // ==================== 云台方向控制 ====================
 
   Widget _buildDirectionPad() {
-    final double btnSize = _getPtzButtonSize(context);
     final double gap = ResponsiveUtils.getSpacing(context, 4);
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(width: btnSize + gap),
-              _buildDirBtn(Icons.arrow_upward, 'up', btnSize),
-              SizedBox(width: btnSize + gap),
-            ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 按容器实际宽/高算 3×3 按钮的边长：3 列 = 2*gap 间缝，3 行 = 2*gap 间缝
+        // 3×3 内含一个"中心空格" SizedBox(btnSize)，与按钮等大，确保 5 个方向键对称
+        // clamp(36, 90) 全屏封顶 90，避免窗口大时按钮过大不协调
+        // 极矮窗口由 SCV 滚动兜底
+        final double btnSize = math
+            .min(
+              (constraints.maxWidth - 2 * gap) / 3,
+              (constraints.maxHeight - 2 * gap) / 3,
+            )
+            .clamp(36.0, 90.0)
+            .toDouble();
+        return Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(width: btnSize + gap),
+                    _buildDirBtn(Icons.arrow_upward, 'up', btnSize),
+                    SizedBox(width: btnSize + gap),
+                  ],
+                ),
+                SizedBox(height: gap),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildDirBtn(Icons.arrow_back, 'left', btnSize),
+                    SizedBox(width: gap),
+                    SizedBox(width: btnSize, height: btnSize),
+                    SizedBox(width: gap),
+                    _buildDirBtn(Icons.arrow_forward, 'right', btnSize),
+                  ],
+                ),
+                SizedBox(height: gap),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(width: btnSize + gap),
+                    _buildDirBtn(Icons.arrow_downward, 'down', btnSize),
+                    SizedBox(width: btnSize + gap),
+                  ],
+                ),
+              ],
+            ),
           ),
-          SizedBox(height: gap),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildDirBtn(Icons.arrow_back, 'left', btnSize),
-              SizedBox(width: gap),
-              SizedBox(width: btnSize, height: btnSize),
-              SizedBox(width: gap),
-              _buildDirBtn(Icons.arrow_forward, 'right', btnSize),
-            ],
-          ),
-          SizedBox(height: gap),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(width: btnSize + gap),
-              _buildDirBtn(Icons.arrow_downward, 'down', btnSize),
-              SizedBox(width: btnSize + gap),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -419,44 +449,76 @@ class _CameraControlPageState extends State<CameraControlPage>
         height: size,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(size * 0.22),
-          color: isActive ? const Color(0xFF3E6B48).withAlpha(220) : const Color(0xFF2A2A3E),
+          color: isActive
+              ? const Color(0xFF3E6B48).withAlpha(220)
+              : const Color(0xFF2A2A3E),
           boxShadow: isActive
-              ? [BoxShadow(color: const Color(0xFF3E6B48).withAlpha(80), blurRadius: 8)]
-              : [BoxShadow(color: Colors.black.withAlpha(60), blurRadius: 4, offset: const Offset(0, 2))],
-          border: Border.all(color: isActive ? const Color(0xFF3E6B48) : const Color(0xFF3A3F48), width: isActive ? 2.0 : 1.0),
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF3E6B48).withAlpha(80),
+                    blurRadius: 8,
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(60),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+          border: Border.all(
+            color: isActive ? const Color(0xFF3E6B48) : const Color(0xFF3A3F48),
+            width: isActive ? 2.0 : 1.0,
+          ),
         ),
-        child: Icon(icon, color: isActive ? Colors.white : Colors.grey[400], size: size * 0.45),
+        child: Icon(
+          icon,
+          color: isActive ? Colors.white : Colors.grey[400],
+          size: size * 0.45,
+        ),
       ),
     );
-  }
-
-  double _getPtzButtonSize(BuildContext context) {
-    final double screenWidth = ResponsiveUtils.getScreenWidth(context);
-    final double screenHeight = ResponsiveUtils.getScreenHeight(context);
-    final bool isLandscape = screenWidth > screenHeight;
-    final double referenceDimension = isLandscape ? screenHeight : screenWidth;
-    return (referenceDimension * 0.18).clamp(50.0, 90.0);
   }
 
   // ==================== 变焦控制 ====================
 
   Widget _buildZoomButtons() {
-    final double btnSize = _getPtzButtonSize(context) * 0.55;
     final double gap = ResponsiveUtils.getSpacing(context, 8);
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildZoomBtn(Icons.add, '放大', 'tele', btnSize),
-          SizedBox(height: gap),
-          _buildZoomBtn(Icons.remove, '缩小', 'wide', btnSize),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 按容器宽/高反算横长方形按钮边长
+        // 按钮高 = btnSize * 0.9，按钮宽 = btnSize * 2.2
+        // 两个按钮垂直堆叠，中间留 gap；由 maxHeight 反算
+        // clamp(20, 65) 封顶 65（按钮实际高 ≈ 59px，宽 ≈ 143px），窗口化时更紧凑
+        final double btnFromH = (constraints.maxHeight - gap) / 2 / 0.9;
+        final double btnFromW = constraints.maxWidth / 2.2;
+        final double btnSize = math
+            .min(btnFromH, btnFromW)
+            .clamp(20.0, 65.0)
+            .toDouble();
+        return Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildZoomBtn(Icons.add, '放大', 'tele', btnSize),
+                SizedBox(height: gap),
+                _buildZoomBtn(Icons.remove, '缩小', 'wide', btnSize),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildZoomBtn(IconData icon, String label, String action, double btnSize) {
+  Widget _buildZoomBtn(
+    IconData icon,
+    String label,
+    String action,
+    double btnSize,
+  ) {
     final isActive = _activeZoom == action;
     return GestureDetector(
       onTapDown: (_) => _onZoomDown(action),
@@ -466,25 +528,57 @@ class _CameraControlPageState extends State<CameraControlPage>
     );
   }
 
-  Widget _buildZoomBtnBody(IconData icon, String label, bool isActive, double btnSize) {
+  Widget _buildZoomBtnBody(
+    IconData icon,
+    String label,
+    bool isActive,
+    double btnSize,
+  ) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       width: btnSize * 2.2,
       height: btnSize * 0.9,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(btnSize * 0.2),
-        color: isActive ? const Color(0xFF3E6B48).withAlpha(220) : const Color(0xFF2A2A3E),
+        color: isActive
+            ? const Color(0xFF3E6B48).withAlpha(220)
+            : const Color(0xFF2A2A3E),
         boxShadow: isActive
-            ? [BoxShadow(color: const Color(0xFF3E6B48).withAlpha(80), blurRadius: 8)]
-            : [BoxShadow(color: Colors.black.withAlpha(60), blurRadius: 4, offset: const Offset(0, 2))],
-        border: Border.all(color: isActive ? const Color(0xFF3E6B48) : const Color(0xFF3A3F48), width: isActive ? 2.0 : 1.0),
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF3E6B48).withAlpha(80),
+                  blurRadius: 8,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withAlpha(60),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+        border: Border.all(
+          color: isActive ? const Color(0xFF3E6B48) : const Color(0xFF3A3F48),
+          width: isActive ? 2.0 : 1.0,
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: isActive ? Colors.white : Colors.grey[400], size: btnSize * 0.4),
+          Icon(
+            icon,
+            color: isActive ? Colors.white : Colors.grey[400],
+            size: btnSize * 0.4,
+          ),
           SizedBox(width: 5),
-          Text(label, style: TextStyle(fontSize: btnSize * 0.28, fontWeight: FontWeight.w600, color: isActive ? Colors.white : Colors.grey[400])),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: btnSize * 0.28,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.white : Colors.grey[400],
+            ),
+          ),
         ],
       ),
     );
@@ -507,22 +601,50 @@ class _CameraControlPageState extends State<CameraControlPage>
   // ==================== 速度选择 ====================
 
   Widget _buildSpeedToggle() {
-    final double btnSize = _getPtzButtonSize(context) * 0.55;
     final double gap = ResponsiveUtils.getSpacing(context, 8);
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildSpeedBtn('低速', _speedMode == 0, () => _onSpeedModeChanged(0), btnSize),
-          SizedBox(height: gap),
-          _buildSpeedBtn('高速', _speedMode == 1, () => _onSpeedModeChanged(1), btnSize),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 与 _buildZoomButtons 同款：按容器宽/高反算横长方形按钮
+        // clamp(20, 65) 封顶 65（按钮实际高 ≈ 59px，宽 ≈ 143px），与变焦保持一致的视觉大小
+        final double btnFromH = (constraints.maxHeight - gap) / 2 / 0.9;
+        final double btnFromW = constraints.maxWidth / 2.2;
+        final double btnSize = math
+            .min(btnFromH, btnFromW)
+            .clamp(20.0, 65.0)
+            .toDouble();
+        return Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSpeedBtn(
+                  '低速',
+                  _speedMode == 0,
+                  () => _onSpeedModeChanged(0),
+                  btnSize,
+                ),
+                SizedBox(height: gap),
+                _buildSpeedBtn(
+                  '高速',
+                  _speedMode == 1,
+                  () => _onSpeedModeChanged(1),
+                  btnSize,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildSpeedBtn(String label, bool isActive, VoidCallback onTap, double btnSize) {
+  Widget _buildSpeedBtn(
+    String label,
+    bool isActive,
+    VoidCallback onTap,
+    double btnSize,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -531,14 +653,37 @@ class _CameraControlPageState extends State<CameraControlPage>
         height: btnSize * 0.9,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(btnSize * 0.2),
-          color: isActive ? const Color(0xFF3E6B48).withAlpha(220) : const Color(0xFF2A2A3E),
+          color: isActive
+              ? const Color(0xFF3E6B48).withAlpha(220)
+              : const Color(0xFF2A2A3E),
           boxShadow: isActive
-              ? [BoxShadow(color: const Color(0xFF3E6B48).withAlpha(80), blurRadius: 8)]
-              : [BoxShadow(color: Colors.black.withAlpha(60), blurRadius: 4, offset: const Offset(0, 2))],
-          border: Border.all(color: isActive ? const Color(0xFF3E6B48) : const Color(0xFF3A3F48), width: isActive ? 2.0 : 1.0),
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF3E6B48).withAlpha(80),
+                    blurRadius: 8,
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(60),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+          border: Border.all(
+            color: isActive ? const Color(0xFF3E6B48) : const Color(0xFF3A3F48),
+            width: isActive ? 2.0 : 1.0,
+          ),
         ),
         child: Center(
-          child: Text(label, style: TextStyle(fontSize: btnSize * 0.28, fontWeight: FontWeight.w600, color: isActive ? Colors.white : Colors.grey[400])),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: btnSize * 0.28,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.white : Colors.grey[400],
+            ),
+          ),
         ),
       ),
     );
@@ -548,19 +693,58 @@ class _CameraControlPageState extends State<CameraControlPage>
 
   Widget _buildPresetSection() {
     final double spacing = ResponsiveUtils.getSpacing(context, 4);
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 预置位按钮尺寸：根据容器实际可用宽度反算（每行最多 8 个）
+        // clamp(24, 60) 封顶 60，避免窗口大时按钮过大
+        // 窄窗 clamp 下限 24，预置位行加 SCV 横滚兜底
+        // 预留一点内边距避免贴边
+        final int perRow = _presetsPerRow;
+        final double availableWidth = constraints.maxWidth - spacing * 2;
+        final double presetBtnSize =
+            ((availableWidth - perRow * spacing) / perRow)
+                .clamp(24.0, 60.0)
+                .toDouble();
+        return Column(
           children: [
-            _buildSaveToggleBtn(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [_buildSaveToggleBtn(presetBtnSize: presetBtnSize)],
+            ),
+            SizedBox(height: spacing),
+            Expanded(
+              child: _buildPresetRow(spacing, presetBtnSize: presetBtnSize),
+            ),
+            SizedBox(height: spacing),
+            // 预置位操作提示行：单行不换行、跟随界面缩放
+            // 用 FittedBox 缩字号兜底，maxLines=1 + overflow=ellipsis 在极窄窗口下不撑爆
+            _buildPresetHint(),
           ],
+        );
+      },
+    );
+  }
+
+  /// 构建预置位操作提示（一行小字）
+  /// - 单行显示，maxLines=1 + overflow=ellipsis 避免任何换行/溢出
+  /// - 字号跟随窗口宽度缩放（FittedBox 在极窄窗口再兜底）
+  /// - 颜色比正文略浅，作为辅助说明不抢焦点
+  Widget _buildPresetHint() {
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          '点击预置位调用机位 · 先点保存再点预置位即可存储 · 长按可重命名',
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: ResponsiveUtils.getFontSize(context, 11),
+            color: Colors.grey[600],
+            letterSpacing: 0.5,
+          ),
         ),
-        SizedBox(height: spacing),
-        Expanded(
-          child: _buildPresetRow(spacing),
-        ),
-      ],
+      ),
     );
   }
 
@@ -569,23 +753,11 @@ class _CameraControlPageState extends State<CameraControlPage>
   int get _presetsPerRow =>
       _config.cameraPresetCount > 8 ? 8 : _config.cameraPresetCount;
 
-  /// 根据屏幕宽度计算预置位按钮尺寸
-  /// 尺寸以「每行数量」为基准计算，保证单行(≤8)或两行(>8)都能完整放下
-  double _getPresetButtonSize(BuildContext context) {
-    final double screenWidth = ResponsiveUtils.getScreenWidth(context);
-    final int perRow = _presetsPerRow;
-    // 每个按钮之间留4的间距，留出页面内边距余量
-    final double availableWidth = screenWidth * 0.90;
-    final double spacing = 4;
-    final double size = (availableWidth - (perRow - 1) * spacing) / perRow;
-    return size.clamp(28.0, 55.0);
-  }
-
   /// 构建预置位按钮区域（横屏/竖屏共用同一布局，仅外层容器不同）
   /// 预置位个数 ≤8 时单行排列；>8 时按每行 8 个分成多行排列
   /// [spacing] 按钮之间的水平/垂直间距
-  Widget _buildPresetRow(double spacing) {
-    final double btnSize = _getPresetButtonSize(context);
+  /// [presetBtnSize] 预置位按钮边长（由 _buildPresetSection 的 LayoutBuilder 算好）
+  Widget _buildPresetRow(double spacing, {required double presetBtnSize}) {
     final int count = _config.cameraPresetCount;
     final int perRow = _presetsPerRow;
     // 计算总行数（向上取整）
@@ -606,7 +778,7 @@ class _CameraControlPageState extends State<CameraControlPage>
             padding: EdgeInsets.symmetric(horizontal: spacing / 2),
             child: SquareButton(
               label: label,
-              size: btnSize,
+              size: presetBtnSize,
               isActive: isActive,
               activeColor: const Color(0xFF3E6B48),
               onTap: () => _onPresetTapped(presetNum),
@@ -615,21 +787,26 @@ class _CameraControlPageState extends State<CameraControlPage>
           ),
         );
       }
+      // 每行用 ConstrainedBox(maxWidth=满行宽) + 水平 SCV 兜底
+      // 极窄窗口下按钮可能被压缩到下限 24 后仍溢出，由 SCV 横向滚动
       rows.add(
-        SizedBox(
-          // 行宽固定为「整行容量」(每行满 8 个时的总宽)，使非满行(如第 2 行)
-          // 从左侧开始排列；整块由外层 Center 在容器中水平居中
-          width: perRow * (btnSize + spacing),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.start,
-            mainAxisSize: MainAxisSize.max,
-            children: buttons,
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: perRow * (presetBtnSize + spacing),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: buttons,
+            ),
           ),
         ),
       );
     }
 
-    // 多行垂直排列（行之间留水平方向的同款间距），外层允许垂直滚动
+    // 多行垂直排列，外层 Center + Column 居中
     return Center(
       child: SingleChildScrollView(
         child: Column(
@@ -650,7 +827,11 @@ class _CameraControlPageState extends State<CameraControlPage>
   /// - 未待命：常规样式，点击进入保存待命（开始呼吸闪烁）
   /// - 待命中：仅呼吸闪烁提示（颜色/发光随动画脉动），
   ///   按钮尺寸与文案保持不变；再次点击可取消待命
-  Widget _buildSaveToggleBtn() {
+  /// [presetBtnSize] 预置位按钮边长，用于按比例缩放保存按钮的 padding/icon/文字
+  Widget _buildSaveToggleBtn({required double presetBtnSize}) {
+    // 缩放基准：presetBtnSize / 60（60 = 典型按钮尺寸）
+    // clamp(0.85, 2.0) 限制极小/极大窗口下的尺寸
+    final double scale = (presetBtnSize / 60.0).clamp(0.85, 2.0);
     return GestureDetector(
       onTap: _onSaveBtnTapped,
       child: AnimatedBuilder(
@@ -660,31 +841,27 @@ class _CameraControlPageState extends State<CameraControlPage>
           final double t = _savePending ? _saveBlinkController.value : 0.0;
           // 颜色在暗橙与亮橙之间脉动，未待命时为常规灰蓝
           final Color baseColor = _savePending
-              ? Color.lerp(
-                  const Color(0xFF7A4A12), const Color(0xFFFFA726), t)!
+              ? Color.lerp(const Color(0xFF7A4A12), const Color(0xFFFFA726), t)!
               : const Color(0xFF1E2228);
           final Color borderColor = _savePending
-              ? Color.lerp(
-                  const Color(0xFFB37728), const Color(0xFFFFC46B), t)!
+              ? Color.lerp(const Color(0xFFB37728), const Color(0xFFFFC46B), t)!
               : const Color(0xFF3A3F48);
           return Container(
             padding: EdgeInsets.symmetric(
-              horizontal: ResponsiveUtils.getSpacing(context, 20),
-              vertical: ResponsiveUtils.getSpacing(context, 10),
+              horizontal: 14 * scale,
+              vertical: 7 * scale,
             ),
             decoration: BoxDecoration(
               color: baseColor,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(12 * scale),
               // 边框宽度固定，避免待命/常态切换时按钮尺寸发生变化
-              border: Border.all(
-                color: borderColor,
-                width: 1.5,
-              ),
+              border: Border.all(color: borderColor, width: 1.5),
               boxShadow: _savePending
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFFFA726)
-                            .withAlpha((40 + 120 * t).round()),
+                        color: const Color(
+                          0xFFFFA726,
+                        ).withAlpha((40 + 120 * t).round()),
                         blurRadius: 6 + 10 * t,
                       ),
                     ]
@@ -695,16 +872,16 @@ class _CameraControlPageState extends State<CameraControlPage>
               children: [
                 Icon(
                   Icons.save_outlined,
-                  size: ResponsiveUtils.getFontSize(context, 15),
+                  size: 15 * scale,
                   color: _savePending ? Colors.white : Colors.grey[500],
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: 6 * scale),
                 Text(
                   // 文案固定为「保存」，待命状态仅靠呼吸闪烁提示，
                   // 避免文字变化导致按钮宽度改变
                   '保存',
                   style: TextStyle(
-                    fontSize: ResponsiveUtils.getFontSize(context, 14),
+                    fontSize: 14 * scale,
                     fontWeight: FontWeight.w600,
                     color: _savePending ? Colors.white : Colors.grey[500],
                   ),
@@ -740,10 +917,14 @@ class _CameraControlPageState extends State<CameraControlPage>
   /// 方向键 → 数字 join 映射（Crestron VTP 模式用）
   int _camDirJoin(String direction) {
     switch (direction) {
-      case 'up': return _config.joinCamUp;
-      case 'down': return _config.joinCamDown;
-      case 'left': return _config.joinCamLeft;
-      case 'right': return _config.joinCamRight;
+      case 'up':
+        return _config.joinCamUp;
+      case 'down':
+        return _config.joinCamDown;
+      case 'left':
+        return _config.joinCamLeft;
+      case 'right':
+        return _config.joinCamRight;
     }
     return _config.joinCamUp;
   }
@@ -760,10 +941,18 @@ class _CameraControlPageState extends State<CameraControlPage>
     int panDir = 3;
     int tiltDir = 3;
     switch (direction) {
-      case 'up':    tiltDir = 1; break;
-      case 'down':  tiltDir = 2; break;
-      case 'left':  panDir = 1; break;
-      case 'right': panDir = 2; break;
+      case 'up':
+        tiltDir = 1;
+        break;
+      case 'down':
+        tiltDir = 2;
+        break;
+      case 'left':
+        panDir = 1;
+        break;
+      case 'right':
+        panDir = 2;
+        break;
     }
     conn.panTiltMove(_currentSpeed, _currentSpeed, panDir, tiltDir);
     setState(() => _activeDirection = direction);
@@ -786,9 +975,7 @@ class _CameraControlPageState extends State<CameraControlPage>
   void _onZoomDown(String action) {
     // Crestron VTP 模式：按住 = press 对应变焦数字 join
     if (_config.crestronMode) {
-      _cip.press(
-        action == 'tele' ? _config.joinCamTele : _config.joinCamWide,
-      );
+      _cip.press(action == 'tele' ? _config.joinCamTele : _config.joinCamWide);
       setState(() => _activeZoom = action);
       return;
     }

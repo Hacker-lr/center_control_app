@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/device_config.dart';
+import '../utils/responsive_utils.dart';
 
 /// ============================================================
 /// 显示通道重命名对话框
@@ -9,11 +10,11 @@ import '../services/device_config.dart';
 /// [onConfirm] - 确认回调，传入新名称
 /// 所有颜色与尺寸参数取自 DeviceConfig 全局配置
 /// ============================================================
-/// 
+///
 /// 弹出一个Material风格的AlertDialog，用于修改通道的名称。
 /// 用户可以输入新名称，点击确定后通过回调函数返回新名称。
 /// 对话框会自动聚焦到输入框，并预置当前名称供用户编辑。
-/// 
+///
 /// [context] - BuildContext上下文，用于显示对话框
 /// [typeName] - 通道类型的中文名称，用于构建对话框标题（如"输入"、"输出"）
 /// [channelNumber] - 通道的编号，从1开始，用于构建对话框标题
@@ -43,35 +44,52 @@ Future<void> showRenameDialog(
         '重命名 $typeName$channelNumber',
         style: TextStyle(color: Colors.grey[200]),
       ),
-      // 对话框内容：单行文本输入框
-      content: TextField(
-        // 绑定之前创建的文本编辑控制器
-        controller: controller,
-        // 打开对话框后自动聚焦到输入框，方便用户直接输入
-        autofocus: true,
-        // 限制输入长度，最大值取自全局配置
-        maxLength: DeviceConfig().channelNameMaxLength,
-        // 输入框装饰配置
-        decoration: InputDecoration(
-          // 输入框提示文字
-          hintText: '请输入新名称',
-          hintStyle: TextStyle(color: Colors.grey[500]),
-          // 输入框未聚焦时的边框样式
-          enabledBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: Colors.grey[700]!),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          // 输入框聚焦时的边框样式，使用主题强调色
-          focusedBorder: OutlineInputBorder(
-            borderSide: const BorderSide(color: DeviceConfig.colorAccent),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          // 输入框背景色取自全局配置
-          fillColor: DeviceConfig.colorDialogFieldBg,
-          filled: true,
+      // 对话框内容：多行文本输入框（支持换行、上限 20 字）
+      // 用 ConstrainedBox 限制最大高度 + SingleChildScrollView 兜底，
+      // 多行输入时不撑爆对话框
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: ResponsiveUtils.getScreenHeight(context) * 0.3,
         ),
-        // 输入文字颜色为白色，适配深色主题
-        style: const TextStyle(color: Colors.white),
+        child: SingleChildScrollView(
+          child: TextField(
+            // 绑定之前创建的文本编辑控制器
+            controller: controller,
+            // 打开对话框后自动聚焦到输入框，方便用户直接输入
+            autofocus: true,
+            // 支持换行：多行输入，回车输入换行而非确认
+            maxLines: null,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
+            textAlign: TextAlign.center,
+            // 限制输入长度，最大值取自全局配置（20）
+            maxLength: DeviceConfig().channelNameMaxLength,
+            // 输入框字体跟随窗口缩放（自适应）
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: ResponsiveUtils.getFontSize(context, 15),
+            ),
+            // 输入框装饰配置
+            decoration: InputDecoration(
+              // 输入框提示文字
+              hintText: '请输入新名称（最多40字，支持回车换行）',
+              hintStyle: TextStyle(color: Colors.grey[500]),
+              // 输入框未聚焦时的边框样式
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.grey[700]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              // 输入框聚焦时的边框样式，使用主题强调色
+              focusedBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: DeviceConfig.colorAccent),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              // 输入框背景色取自全局配置
+              fillColor: DeviceConfig.colorDialogFieldBg,
+              filled: true,
+            ),
+          ),
+        ),
       ),
       // 对话框底部操作按钮
       actions: [
@@ -90,8 +108,10 @@ Future<void> showRenameDialog(
             // 关闭对话框
             Navigator.pop(context);
           },
-          child: const Text('确定',
-              style: TextStyle(color: DeviceConfig.colorAccent)),
+          child: const Text(
+            '确定',
+            style: TextStyle(color: DeviceConfig.colorAccent),
+          ),
         ),
       ],
     ),

@@ -96,7 +96,8 @@ class _ChannelButtonState extends State<ChannelButton> {
       (timer) {
         setState(() {
           // 计算当前长按进度：已触发次数 × 每次间隔 / 总长按时长
-          _pressProgress = timer.tick *
+          _pressProgress =
+              timer.tick *
               _config.longPressTickIntervalMs /
               _config.longPressDurationMs;
         });
@@ -150,8 +151,7 @@ class _ChannelButtonState extends State<ChannelButton> {
     final double borderRadius =
         widget.width * DeviceConfig.buttonBorderRadiusRatio;
     // 计算高亮状态阴影模糊度
-    final double shadowBlur =
-        widget.width * DeviceConfig.buttonShadowBlurRatio;
+    final double shadowBlur = widget.width * DeviceConfig.buttonShadowBlurRatio;
     // 计算普通状态阴影模糊度
     final double smallShadowBlur =
         widget.width * DeviceConfig.buttonShadowBlurSmallRatio;
@@ -194,8 +194,8 @@ class _ChannelButtonState extends State<ChannelButton> {
             color: _isPressing
                 ? DeviceConfig.colorPressing
                 : (widget.isHighlighted
-                    ? activeColor
-                    : DeviceConfig.colorButtonBorder),
+                      ? activeColor
+                      : DeviceConfig.colorButtonBorder),
             // 边框宽度：按下状态最粗(2.0)，高亮状态中等(1.5)，普通状态最细(1.0)
             width: _isPressing ? 2.0 : (widget.isHighlighted ? 1.5 : 1.0),
           ),
@@ -219,38 +219,122 @@ class _ChannelButtonState extends State<ChannelButton> {
                     value: _pressProgress.clamp(0.0, 1.0),
                     backgroundColor: Colors.transparent,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                        DeviceConfig.colorPressing),
+                      DeviceConfig.colorPressing,
+                    ),
                     minHeight: DeviceConfig.longPressIndicatorHeight,
                   ),
                 ),
               ),
-            // 按钮标签 - 使用统一字号（由按钮高度决定，不随文字长度缩放），
-            // 过长名称自动换行并在两行后省略，确保所有通道名称字号一致、不再忽大忽小
-            Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal:
-                    widget.width * DeviceConfig.buttonPaddingHorizontalRatio,
-                vertical:
-                    widget.height * DeviceConfig.buttonPaddingVerticalRatio,
-              ),
-              child: Text(
-                widget.label,
-                textAlign: TextAlign.center,
-                softWrap: true,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize:
-                      widget.height * DeviceConfig.buttonFontSizeRatio,
-                  fontWeight: FontWeight.w600,
-                  color: widget.isHighlighted
-                      ? Colors.white
-                      : Colors.grey[400],
-                  height: 1.1,
-                ),
-              ),
+            // 按钮标签：最多 2 行，超长名称自动缩小字号完整显示，不再截断。
+            // 用 TextPainter 二分查找「能在 2 行 + 按钮可用高度内完整显示」的
+            // 最大字号（名字越长字越小，最短 8px 兜底，短名字保持原基准字号）。
+            // 矩阵页与大屏页通道按钮共用此组件，一处修改同时生效。
+            _AdaptiveChannelLabel(
+              label: widget.label,
+              maxWidth:
+                  widget.width *
+                  (1 - 2 * DeviceConfig.buttonPaddingHorizontalRatio),
+              maxHeight:
+                  widget.height *
+                  (1 - 2 * DeviceConfig.buttonPaddingVerticalRatio),
+              baseFont: widget.height * DeviceConfig.buttonFontSizeRatio,
+              isHighlighted: widget.isHighlighted,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ============================================================
+/// 通道按钮自适应标签
+/// 最多显示 2 行；用二分查找「2 行内能完整显示」的最大字号：
+///   - 名字短 → 保持 baseFont（1 行）
+///   - 名字长 / 按钮窄（全屏 8 列等）→ 字号自动压小，保证 2 行内全部可见
+/// 不设 minFont 下限（下限 1.0），确保任意长度命名都能在 2 行内完整显示，
+/// 不再出现"FittedBox 因 2 行总高≤maxHeight 误判装得下而不缩放、内容被裁"的问题。
+/// 测量约束（maxLines:2 + maxWidth/maxHeight）与渲染约束（Text）保持一致。
+/// ============================================================
+class _AdaptiveChannelLabel extends StatelessWidget {
+  final String label;
+  final double maxWidth;
+  final double maxHeight;
+  final double baseFont;
+  final bool isHighlighted;
+
+  const _AdaptiveChannelLabel({
+    required this.label,
+    required this.maxWidth,
+    required this.maxHeight,
+    required this.baseFont,
+    required this.isHighlighted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 二分查找「2 行内装下且总高 ≤ maxHeight」的最大字号。
+    // 关键：TextPainter 与 Text 都设 maxLines:2，且接受条件必须
+    //   !tp.didExceedMaxLines（2 行真装得下）&& tp.height ≤ maxHeight
+    // 不设 minFont 硬下限（下限 1.0），窄按钮/超长命名也能 2 行完整显示。
+    const double minFont = 1.0;
+    final TextStyle baseStyle = TextStyle(
+      fontSize: baseFont,
+      fontWeight: FontWeight.w600,
+      height: 1.1,
+    );
+
+    double fitFont = minFont;
+    double lo = minFont;
+    double hi = baseFont;
+    // 先判断 baseFont 本身就能 2 行装下，避免不必要的二分
+    final TextPainter tpBase = TextPainter(
+      text: TextSpan(text: label, style: baseStyle),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+      maxLines: 2,
+    )..layout(maxWidth: maxWidth);
+    if (!tpBase.didExceedMaxLines && tpBase.height <= maxHeight + 0.5) {
+      fitFont = baseFont;
+    } else {
+      for (int i = 0; i < 30; i++) {
+        final double mid = (lo + hi) / 2;
+        final TextPainter tp = TextPainter(
+          text: TextSpan(
+            text: label,
+            style: baseStyle.copyWith(fontSize: mid),
+          ),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+        )..layout(maxWidth: maxWidth);
+        // 必须 2 行真装得下 且 总高不超可用区，才接受该字号
+        if (!tp.didExceedMaxLines && tp.height <= maxHeight + 0.5) {
+          fitFont = mid;
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+    }
+
+    return SizedBox(
+      width: maxWidth,
+      height: maxHeight,
+      child: Center(
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          softWrap: true,
+          // 最多 2 行；fitFont 已保证 2 行内完整显示，overflow 仅为极端兜底
+          maxLines: 2,
+          overflow: TextOverflow.visible,
+          style: TextStyle(
+            fontSize: fitFont,
+            fontWeight: FontWeight.w600,
+            color: isHighlighted ? Colors.white : Colors.grey[400],
+            height: 1.1,
+          ),
         ),
       ),
     );

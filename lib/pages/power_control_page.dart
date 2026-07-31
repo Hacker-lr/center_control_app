@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/base_connection.dart';
 import '../services/device_connection.dart';
@@ -52,17 +53,11 @@ class _PowerControlPageState extends State<PowerControlPage> {
   Widget build(BuildContext context) {
     // 使用 ListenableBuilder 监听两个设备连接状态与 CIP 状态变化，自动刷新 UI
     return ListenableBuilder(
-      listenable: Listenable.merge([
-        _deviceConnection,
-        _ledConnection,
-        _cip,
-      ]),
+      listenable: Listenable.merge([_deviceConnection, _ledConnection, _cip]),
       builder: (context, child) {
         // 是否显示某个区块（由配置页勾选决定）
         final bool showTiming = _config.showTimingPowerControl;
         final bool showLed = _config.showLedPowerControl;
-        // 两个区块同时显示时整体缩小一点，只显示一个时保持原尺寸
-        final double powerScale = (showTiming && showLed) ? 0.8 : 1.0;
 
         // SafeArea：确保内容不被系统状态栏遮挡
         return SafeArea(
@@ -78,24 +73,103 @@ class _PowerControlPageState extends State<PowerControlPage> {
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 12)),
                   // 连接状态指示器：显示已启用区块对应设备的连接状态
                   _buildConnectionStatusIndicator(),
-                  // 顶部占位：将两个控制卡片推到页面中间位置
-                  const Spacer(flex: 1),
                   // 控制卡片区：根据勾选情况渲染时序电源 / 大屏电源 两个区块
-                  Column(
-                    children: [
-                      // 时序电源控制区块
-                      if (showTiming) _buildPowerControlsCard(powerScale),
-                      // 两个区块都显示时，中间留间隔
-                      if (showTiming && showLed)
-                        SizedBox(height: ResponsiveUtils.getSpacing(context, 16)),
-                      // 大屏电源控制区块（PLC）
-                      if (showLed) _buildLedPowerControlsCard(powerScale),
-                      // 两个区块都未启用时显示提示
-                      if (!showTiming && !showLed) _buildEmptyHint(),
-                    ],
+                  // 卡片整体跟随可用宽度自适应缩放，并在剩余空间内垂直居中。
+                  // 矮窗下用 SingleChildScrollView 兜底，防止内容溢出。
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // 卡片最大宽度：可用宽度的 90%，上限 1000
+                        // 桌面窗口下封顶 1000，左右留白让卡片在容器中居中
+                        final double cardMaxW = math.min(
+                          constraints.maxWidth * 0.9,
+                          1000.0,
+                        );
+                        // 当前可见的卡片数量（两个都未启用时按 1 算，给 _buildEmptyHint 留位置）
+                        int cardCount =
+                            (showTiming ? 1 : 0) + (showLed ? 1 : 0);
+                        if (cardCount == 0) cardCount = 1;
+                        // 区块间垂直间隔
+                        final double blockGap = ResponsiveUtils.getSpacing(
+                          context,
+                          16,
+                        );
+                        // 卡片内边距
+                        final double cardPad = ResponsiveUtils.getSpacing(
+                          context,
+                          16,
+                        );
+                        // 标题块高度：Text 实际占位 = fontSize × lineHeight（默认 ~1.4），
+                        // 之前只算 fontSize+spacing 偏小，导致卡片底部溢出 3~10px。
+                        // 这里用 1.4 倍行高系数校正，并给标题下方间距也乘 1.2 倍。
+                        final double titleFontSize =
+                            ResponsiveUtils.getFontSize(context, 14);
+                        final double titleSpacing = ResponsiveUtils.getSpacing(
+                          context,
+                          12,
+                        );
+                        final double titleBlock =
+                            titleFontSize * 1.4 + titleSpacing * 1.2;
+                        // 按钮区域可用尺寸
+                        final double contentW = cardMaxW - 2 * cardPad;
+                        final double btnGap = ResponsiveUtils.getSpacing(
+                          context,
+                          12,
+                        );
+                        final double btnFromW = (contentW - btnGap) / 2;
+                        // 高度方向按容器实际可用高度均分；不够时由 SCV 滚动兜底
+                        final double perCardH =
+                            (constraints.maxHeight -
+                                blockGap * (cardCount - 1)) /
+                            cardCount;
+                        // btnFromH 再减 6px 安全余量，防 Text 行高波动、图标字形
+                        // ascent/descent 差异导致卡片底部溢出（实测大屏电源卡片
+                        // 因 cast_connected 图标垂直对齐问题会多溢出 ~7px）
+                        final double btnFromH =
+                            perCardH - 2 * cardPad - titleBlock - 6;
+                        // 按钮尺寸：取宽/高上限的较小值，桌面下封顶 180
+                        // （用户要求"开/关按钮像原来那样"），窄窗自动缩小
+                        final double btnSize = math
+                            .min(btnFromW, btnFromH)
+                            .clamp(56.0, 180.0);
+
+                        // 卡片组：固定宽度 cardMaxW，内部 Column 居中
+                        // 每张卡片显式传 height=perCardH，避免依赖
+                        // IntrinsicHeight 隐式高度时 Container 底部 1px 边框
+                        // 因布局精度被裁掉的问题
+                        Widget cardsWidget = Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 两个区块都未启用时显示提示
+                            if (!showTiming && !showLed)
+                              _buildEmptyHint()
+                            else ...[
+                              if (showTiming)
+                                _buildPowerControlsCard(
+                                  btnSize: btnSize,
+                                  height: perCardH,
+                                ),
+                              if (showTiming && showLed)
+                                SizedBox(height: blockGap),
+                              if (showLed)
+                                _buildLedPowerControlsCard(
+                                  btnSize: btnSize,
+                                  height: perCardH,
+                                ),
+                            ],
+                          ],
+                        );
+
+                        // 每张卡片已有显式 height=perCardH，SCV 三件套简化：
+                        // 用 Center 垂直居中卡片组即可（卡片高度固定，
+                        // 不会出现 SCV 中 center 失效的问题）
+                        return Center(
+                          child: SizedBox(width: cardMaxW, child: cardsWidget),
+                        );
+                      },
+                    ),
                   ),
-                  // 底部占位：将状态提示文字推到页面底部上方
-                  const Spacer(flex: 1),
                   // 状态提示文字：根据按钮点击状态动态显示操作反馈
                   _buildStatusText(),
                   // 底部间距
@@ -136,26 +210,34 @@ class _PowerControlPageState extends State<PowerControlPage> {
   /// ============================================================
   /// 构建电源控制卡片（时序电源控制区块）
   /// 返回一个带标题和两个圆形按钮的卡片容器
+  /// [btnSize] 由外层 LayoutBuilder 根据实际可用空间反算，确保整体跟随窗口缩放
+  /// [height] 显式卡片高度（=perCardH），避免 Container 隐式高度在
+  /// IntrinsicHeight 嵌套下少算 1-2px 导致底部边框被裁
   /// ============================================================
-  Widget _buildPowerControlsCard(double scale) {
+  Widget _buildPowerControlsCard({
+    required double btnSize,
+    required double height,
+  }) {
     return Container(
-      padding: EdgeInsets.all(ResponsiveUtils.getSpacing(context, 16) * scale),
+      height: height,
+      padding: EdgeInsets.all(ResponsiveUtils.getSpacing(context, 16)),
       decoration: BoxDecoration(
         color: const Color(0xFF0D1117),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF1E2228), width: 1),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // 卡片标题："时序电源控制"
           Padding(
             padding: EdgeInsets.only(
-              bottom: ResponsiveUtils.getSpacing(context, 12) * scale,
+              bottom: ResponsiveUtils.getSpacing(context, 12),
             ),
             child: Text(
               '时序电源控制',
               style: TextStyle(
-                fontSize: ResponsiveUtils.getFontSize(context, 14) * scale,
+                fontSize: ResponsiveUtils.getFontSize(context, 14),
                 fontWeight: FontWeight.w600,
                 color: Colors.grey[500],
                 letterSpacing: 2.0,
@@ -173,7 +255,7 @@ class _PowerControlPageState extends State<PowerControlPage> {
                 _isPowerOnActive,
                 const Color(0xFF1B5E20),
                 () => _handlePowerOn(),
-                scale: scale,
+                btnSize: btnSize,
               ),
               // 电源关按钮：红色主题，点击发送电源关闭指令
               _buildPowerButton(
@@ -182,7 +264,7 @@ class _PowerControlPageState extends State<PowerControlPage> {
                 _isPowerOffActive,
                 const Color(0xFF8B0000),
                 () => _handlePowerOff(),
-                scale: scale,
+                btnSize: btnSize,
               ),
             ],
           ),
@@ -194,26 +276,33 @@ class _PowerControlPageState extends State<PowerControlPage> {
   /// ============================================================
   /// 构建大屏电源控制卡片（大屏电箱 PLC 控制区块）
   /// 标题"大屏电源控制"，含大屏开/大屏关两个圆形按钮
+  /// [btnSize] 由外层 LayoutBuilder 根据实际可用空间反算
+  /// [height] 显式卡片高度（=perCardH），避免底部边框被裁
   /// ============================================================
-  Widget _buildLedPowerControlsCard(double scale) {
+  Widget _buildLedPowerControlsCard({
+    required double btnSize,
+    required double height,
+  }) {
     return Container(
-      padding: EdgeInsets.all(ResponsiveUtils.getSpacing(context, 16) * scale),
+      height: height,
+      padding: EdgeInsets.all(ResponsiveUtils.getSpacing(context, 16)),
       decoration: BoxDecoration(
         color: const Color(0xFF0D1117),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF1E2228), width: 1),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // 卡片标题："大屏电源控制"
           Padding(
             padding: EdgeInsets.only(
-              bottom: ResponsiveUtils.getSpacing(context, 12) * scale,
+              bottom: ResponsiveUtils.getSpacing(context, 12),
             ),
             child: Text(
               '大屏电源控制',
               style: TextStyle(
-                fontSize: ResponsiveUtils.getFontSize(context, 14) * scale,
+                fontSize: ResponsiveUtils.getFontSize(context, 14),
                 fontWeight: FontWeight.w600,
                 color: Colors.grey[500],
                 letterSpacing: 2.0,
@@ -231,7 +320,7 @@ class _PowerControlPageState extends State<PowerControlPage> {
                 _isLedOnActive,
                 const Color(0xFF1B5E20),
                 () => _handleLedOn(),
-                scale: scale,
+                btnSize: btnSize,
               ),
               // 大屏关按钮：红色主题，点击发送大屏电源关闭指令
               _buildPowerButton(
@@ -240,7 +329,7 @@ class _PowerControlPageState extends State<PowerControlPage> {
                 _isLedOffActive,
                 const Color(0xFF8B0000),
                 () => _handleLedOff(),
-                scale: scale,
+                btnSize: btnSize,
               ),
             ],
           ),
@@ -261,14 +350,10 @@ class _PowerControlPageState extends State<PowerControlPage> {
     }
     final List<Widget> chips = [];
     if (_config.showTimingPowerControl) {
-      chips.add(
-        _buildSingleStatusChip('时序电源', _deviceConnection.status),
-      );
+      chips.add(_buildSingleStatusChip('时序电源', _deviceConnection.status));
     }
     if (_config.showLedPowerControl) {
-      chips.add(
-        _buildSingleStatusChip('大屏电源', _ledConnection.status),
-      );
+      chips.add(_buildSingleStatusChip('大屏电源', _ledConnection.status));
     }
     // 没有任何区块被启用时，给出中性提示
     if (chips.isEmpty) {
@@ -358,8 +443,7 @@ class _PowerControlPageState extends State<PowerControlPage> {
             ),
           ),
           // 已连接状态下显示心跳计数（仅对真正建立连接的设备有意义）
-          if (status == ConnectionStatus.connected &&
-              label == '时序电源') ...[
+          if (status == ConnectionStatus.connected && label == '时序电源') ...[
             SizedBox(width: ResponsiveUtils.getSpacing(context, 10)),
             Text(
               '心跳 #${_deviceConnection.heartbeatCount}',
@@ -381,6 +465,7 @@ class _PowerControlPageState extends State<PowerControlPage> {
   /// [isActive] 是否激活状态（激活时显示高亮效果）
   /// [activeColor] 激活时的主题颜色
   /// [onPressed] 点击回调函数
+  /// [btnSize] 按钮直径（外层 LayoutBuilder 算好后传入，确保跟随窗口缩放）
   /// ============================================================
   Widget _buildPowerButton(
     String label,
@@ -388,23 +473,20 @@ class _PowerControlPageState extends State<PowerControlPage> {
     bool isActive,
     Color activeColor,
     VoidCallback onPressed, {
-    double scale = 1.0,
+    required double btnSize,
   }) {
-    // 获取响应式按钮尺寸；两个区块同时显示时按比例缩小
-    final double buttonSize =
-        ResponsiveUtils.getPowerButtonSize(context) * scale;
     // 图标大小为按钮尺寸的 30%
-    final double iconSize = buttonSize * 0.3;
-    // 获取响应式字体大小
-    final double fontSize = ResponsiveUtils.getFontSize(context, 14);
+    final double iconSize = btnSize * 0.3;
+    // 文字大小与按钮尺寸成比例（封顶 16、底 12）
+    final double fontSize = math.min(16.0, math.max(12.0, btnSize * 0.11));
 
     return GestureDetector(
       onTap: onPressed,
       // AnimatedContainer：按钮状态变化时带平滑过渡动画
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        width: buttonSize,
-        height: buttonSize,
+        width: btnSize,
+        height: btnSize,
         // 圆形按钮装饰
         decoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -417,14 +499,14 @@ class _PowerControlPageState extends State<PowerControlPage> {
               ? [
                   BoxShadow(
                     color: activeColor.withAlpha(80),
-                    blurRadius: buttonSize * 0.12,
+                    blurRadius: btnSize * 0.12,
                     spreadRadius: 2,
                   ),
                 ]
               : [
                   BoxShadow(
                     color: Colors.black.withAlpha(80),
-                    blurRadius: buttonSize * 0.06,
+                    blurRadius: btnSize * 0.06,
                     offset: const Offset(0, 4),
                   ),
                 ],
@@ -449,7 +531,7 @@ class _PowerControlPageState extends State<PowerControlPage> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: fontSize * scale,
+                  fontSize: fontSize,
                   fontWeight: FontWeight.w600,
                   color: isActive ? Colors.white : Colors.grey[500],
                   letterSpacing: 1.0,

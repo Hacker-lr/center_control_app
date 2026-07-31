@@ -562,8 +562,8 @@ class _BigScreenPageState extends State<BigScreenPage> {
         /// 添加状态切换动画效果，提升用户体验
         duration: Duration(milliseconds: DeviceConfig.animationDurationMs),
         padding: EdgeInsets.symmetric(
-          horizontal: ResponsiveUtils.getSpacing(context, 12),
-          vertical: ResponsiveUtils.getSpacing(context, 6),
+          horizontal: ResponsiveUtils.getSpacing(context, 20),
+          vertical: ResponsiveUtils.getSpacing(context, 12),
         ),
         decoration: BoxDecoration(
           /// 选中时使用高亮背景色，未选中时使用默认背景色
@@ -594,7 +594,7 @@ class _BigScreenPageState extends State<BigScreenPage> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: ResponsiveUtils.getFontSize(context, 12),
+            fontSize: ResponsiveUtils.getFontSize(context, 16),
             fontWeight: FontWeight.w600,
 
             /// 选中时文字为白色，未选中时为灰色

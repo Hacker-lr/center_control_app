@@ -51,6 +51,8 @@ class CenterControlApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
+        // 全局字体改为黑体（SimHei）；所有未显式指定 fontFamily 的文字均继承此设置
+        fontFamily: 'SimHei',
         scaffoldBackgroundColor: const Color(0xFF0D1117),
         primaryColor: const Color(0xFF1F4068),
         colorScheme: const ColorScheme.dark(
@@ -169,10 +171,12 @@ class _MainPageState extends State<MainPage> {
           icon: Icons.videocam_outlined,
           label: '视频矩阵',
           page: const VideoMatrixPage(),
-          onConnect:
-              _config.crestronMode ? () {} : () => _matrixConnection.connect(),
-          onDisconnect:
-              _config.crestronMode ? () {} : () => _matrixConnection.disconnect(),
+          onConnect: _config.crestronMode
+              ? () {}
+              : () => _matrixConnection.connect(),
+          onDisconnect: _config.crestronMode
+              ? () {}
+              : () => _matrixConnection.disconnect(),
         ),
       );
     }
@@ -200,9 +204,12 @@ class _MainPageState extends State<MainPage> {
           label: 'Crestron',
           page: const CrestronPage(),
           // Crestron 模式下 CIP 由全局统一管理，本页不再重复开关
-          onConnect: _config.crestronMode ? () {} : () => _cipConnection.connect(),
-          onDisconnect:
-              _config.crestronMode ? () {} : () => _cipConnection.disconnect(),
+          onConnect: _config.crestronMode
+              ? () {}
+              : () => _cipConnection.connect(),
+          onDisconnect: _config.crestronMode
+              ? () {}
+              : () => _cipConnection.disconnect(),
         ),
       );
     }
@@ -234,10 +241,23 @@ class _MainPageState extends State<MainPage> {
         _cameraManager.disconnectAll();
         _cipConnection.connect();
       } else {
+        // 切回普通直连模式：断开 CIP，立即按最新配置重建并连接各直连设备，
+        // 无需保存即可生效（修复“关 VTP 后要点保存摄像头才连上”的问题）
         _cipConnection.disconnect();
-        // 关闭后让当前页按“直连模式”重新建立对应设备连接
-        if (_pageCount > 0 && _currentIndex < _pageCount) {
-          _pageEntries[_currentIndex].onConnect();
+        // 摄像头连接实例固化于构造时，必须用 rebuild() 按最新配置重建后连接
+        _cameraManager.rebuild();
+        if (_config.showPowerControl) {
+          _deviceConnection.connect();
+          _ledPowerConnection.connect();
+        }
+        if (_config.showBigScreen) {
+          _bigScreenConnection.connect();
+        }
+        if (_config.showVideoMatrix) {
+          _matrixConnection.connect();
+        }
+        if (_config.showCameraControl) {
+          _cameraManager.connectCamera(1);
         }
       }
     }
@@ -267,7 +287,8 @@ class _MainPageState extends State<MainPage> {
     super.initState();
     // 注册配置变化监听器，配置页面修改后返回时能自动刷新
     _config.addListener(_onConfigChanged);
-    // 记录初始双模式状态
+    // 记录初始双模式状态（此时持久化配置可能尚未异步加载，先按默认值占位，
+    // 真正的模式判定在配置加载完成后的 _onConfigChanged 中处理）
     _crestronModeActive = _config.crestronMode;
     if (_pageCount == 0) {
       debugPrint('[主页面] 警告：没有启用的页面！请在 DeviceConfig 中设置 showXxx = true');
@@ -277,8 +298,20 @@ class _MainPageState extends State<MainPage> {
     if (_crestronModeActive) {
       _cipConnection.connect();
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _pageEntries[_currentIndex].onConnect();
+    // 关键修复：CameraConnectionManager 构造时把摄像头列表按【默认值】固化，
+    // 而持久化配置（真实 IP/端口/协议）是异步从 SharedPreferences 加载的。
+    // 若不等配置加载完成就连接，会连上默认的 TCP 摄像头而连不上，
+    // 表现为“一直重连连不上”，必须手动点保存触发 rebuild 才恢复。
+    // 因此这里先 await 配置加载，再按真实配置 rebuild 摄像头连接列表；
+    // 之后首帧 onConnect 会用真实配置连接（进入摄像头页即连上正确设备）。
+    _config.ensureLoaded().then((_) {
+      if (!mounted) return;
+      _cameraManager.rebuild();
+      // 等首帧布局完成后再触发当前页 onConnect（摄像头此时已用真实配置就绪）
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _pageEntries[_currentIndex].onConnect();
+      });
     });
   }
 
@@ -369,40 +402,37 @@ class _MainPageState extends State<MainPage> {
               reverseTransitionDuration: const Duration(milliseconds: 450),
               pageBuilder: (context, animation, secondaryAnimation) =>
                   const SystemConfigPage(),
-              transitionsBuilder: (
-                context,
-                animation,
-                secondaryAnimation,
-                child,
-              ) {
-                // 进场：从下方明显滑入(1/4屏) + 轻微放大浮现 + 平缓渐显，避免对全屏页面而言太微弱；返回时自动反向
-                final slide = Tween<Offset>(
-                  begin: const Offset(0, 0.25),
-                  end: Offset.zero,
-                ).animate(
-                  CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
-                  ),
-                );
-                final fade = CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeInOut,
-                );
-                final scale = Tween<double>(begin: 0.95, end: 1.0).animate(
-                  CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
-                  ),
-                );
-                return FadeTransition(
-                  opacity: fade,
-                  child: SlideTransition(
-                    position: slide,
-                    child: ScaleTransition(scale: scale, child: child),
-                  ),
-                );
-              },
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    // 进场：从下方明显滑入(1/4屏) + 轻微放大浮现 + 平缓渐显，避免对全屏页面而言太微弱；返回时自动反向
+                    final slide =
+                        Tween<Offset>(
+                          begin: const Offset(0, 0.25),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        );
+                    final fade = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeInOut,
+                    );
+                    final scale = Tween<double>(begin: 0.95, end: 1.0).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    );
+                    return FadeTransition(
+                      opacity: fade,
+                      child: SlideTransition(
+                        position: slide,
+                        child: ScaleTransition(scale: scale, child: child),
+                      ),
+                    );
+                  },
             ),
           );
         },

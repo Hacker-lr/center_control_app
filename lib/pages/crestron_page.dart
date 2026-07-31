@@ -22,11 +22,21 @@ class _CrestronPageState extends State<CrestronPage> {
   final DeviceConfig _config = DeviceConfig();
 
   // 控制输入控制器
-  final TextEditingController _digitalJoinController = TextEditingController(text: '1');
-  final TextEditingController _analogJoinController = TextEditingController(text: '1');
-  final TextEditingController _analogValueController = TextEditingController(text: '32768');
-  final TextEditingController _serialJoinController = TextEditingController(text: '1');
-  final TextEditingController _serialValueController = TextEditingController(text: 'Hello Crestron');
+  final TextEditingController _digitalJoinController = TextEditingController(
+    text: '1',
+  );
+  final TextEditingController _analogJoinController = TextEditingController(
+    text: '1',
+  );
+  final TextEditingController _analogValueController = TextEditingController(
+    text: '32768',
+  );
+  final TextEditingController _serialJoinController = TextEditingController(
+    text: '1',
+  );
+  final TextEditingController _serialValueController = TextEditingController(
+    text: 'Hello Crestron',
+  );
 
   // 订阅 token 列表（离开页面时取消）
   final List<String> _subTokens = [];
@@ -198,11 +208,36 @@ class _CrestronPageState extends State<CrestronPage> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _actionButton('置高', Icons.radio_button_checked, const Color(0xFF1B5E20), () => _setDigital(1)),
-            _actionButton('置低', Icons.radio_button_unchecked, const Color(0xFF8B0000), () => _setDigital(0)),
-            _actionButton('脉冲', Icons.flash_on, const Color(0xFF1F4068), () => _cip.pulse(_parseInt(_digitalJoinController) ?? 1)),
-            _actionButton('按下', Icons.touch_app, const Color(0xFF3A5A8C), () => _cip.press(_parseInt(_digitalJoinController) ?? 1)),
-            _actionButton('释放', Icons.back_hand, Colors.grey[700]!, () => _cip.release(_parseInt(_digitalJoinController) ?? 1)),
+            _actionButton(
+              '置高',
+              Icons.radio_button_checked,
+              const Color(0xFF1B5E20),
+              () => _setDigital(1),
+            ),
+            _actionButton(
+              '置低',
+              Icons.radio_button_unchecked,
+              const Color(0xFF8B0000),
+              () => _setDigital(0),
+            ),
+            _actionButton(
+              '脉冲',
+              Icons.flash_on,
+              const Color(0xFF1F4068),
+              () => _cip.pulse(_parseInt(_digitalJoinController) ?? 1),
+            ),
+            _actionButton(
+              '按下',
+              Icons.touch_app,
+              const Color(0xFF3A5A8C),
+              () => _cip.press(_parseInt(_digitalJoinController) ?? 1),
+            ),
+            _actionButton(
+              '释放',
+              Icons.back_hand,
+              Colors.grey[700]!,
+              () => _cip.release(_parseInt(_digitalJoinController) ?? 1),
+            ),
           ],
         ),
       ],
@@ -222,7 +257,13 @@ class _CrestronPageState extends State<CrestronPage> {
           ],
         ),
         const SizedBox(height: 10),
-        _actionButton('设置模拟值', Icons.tune, const Color(0xFF1F4068), _setAnalog, full: true),
+        _actionButton(
+          '设置模拟值',
+          Icons.tune,
+          const Color(0xFF1F4068),
+          _setAnalog,
+          full: true,
+        ),
       ],
     );
   }
@@ -247,14 +288,23 @@ class _CrestronPageState extends State<CrestronPage> {
               hintText: '串口内容',
               hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
               border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               counterText: '',
             ),
             style: const TextStyle(fontSize: 14),
           ),
         ),
         const SizedBox(height: 10),
-        _actionButton('发送串口', Icons.send, const Color(0xFF1F4068), _setSerial, full: true),
+        _actionButton(
+          '发送串口',
+          Icons.send,
+          const Color(0xFF1F4068),
+          _setSerial,
+          full: true,
+        ),
       ],
     );
   }
@@ -275,7 +325,10 @@ class _CrestronPageState extends State<CrestronPage> {
           padding: const EdgeInsets.all(8),
           child: logs.isEmpty
               ? const Center(
-                  child: Text('暂无事件', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  child: Text(
+                    '暂无事件',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
                 )
               : ListView.builder(
                   reverse: true,
@@ -288,7 +341,6 @@ class _CrestronPageState extends State<CrestronPage> {
                         item,
                         style: const TextStyle(
                           fontSize: 12,
-                          fontFamily: 'monospace',
                           color: Color(0xFF9CDCFE),
                         ),
                       ),
@@ -313,7 +365,9 @@ class _CrestronPageState extends State<CrestronPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: EdgeInsets.only(bottom: ResponsiveUtils.getSpacing(context, 12)),
+            padding: EdgeInsets.only(
+              bottom: ResponsiveUtils.getSpacing(context, 12),
+            ),
             child: Text(
               title,
               style: TextStyle(
@@ -350,7 +404,10 @@ class _CrestronPageState extends State<CrestronPage> {
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: const InputDecoration(
               border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               counterText: '',
             ),
             style: const TextStyle(fontSize: 14),
