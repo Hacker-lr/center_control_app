@@ -48,6 +48,8 @@ class _SystemConfigPageState extends State<SystemConfigPage>
   final TextEditingController _cipIpIdController = TextEditingController();
   final TextEditingController _cipUsernameController = TextEditingController();
   final TextEditingController _cipPasswordController = TextEditingController();
+  final TextEditingController _cipPulseHoldMsController =
+      TextEditingController();
 
   // ---- 中控 Join 映射 ----
   final TextEditingController _joinPowerOnController = TextEditingController();
@@ -191,6 +193,7 @@ class _SystemConfigPageState extends State<SystemConfigPage>
       _cipIpIdController,
       _cipUsernameController,
       _cipPasswordController,
+      _cipPulseHoldMsController,
       _joinPowerOnController,
       _joinPowerOffController,
       _joinLayoutFullController,
@@ -273,6 +276,7 @@ class _SystemConfigPageState extends State<SystemConfigPage>
         .toUpperCase();
     _cipUsernameController.text = _config.cipUsername;
     _cipPasswordController.text = _config.cipPassword;
+    _cipPulseHoldMsController.text = '${_config.cipPulseHoldMs}';
     _cipSecure = _config.cipSecure;
     _showCrestronControl = _config.showCrestronControl;
 
@@ -377,6 +381,10 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     _config.setCipSecure(_cipSecure);
     _config.setCipUsername(_cipUsernameController.text.trim());
     _config.setCipPassword(_cipPasswordController.text);
+    _config.setCipPulseHoldMs(
+      int.tryParse(_cipPulseHoldMsController.text.trim()) ??
+          ConfigDefaults.cipPulseHoldMs,
+    );
     _config.setShowCrestronControl(_showCrestronControl);
 
     _config.setJoinPowerOn(
@@ -706,6 +714,13 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                                     label: 'IP-ID（十六进制）',
                                     controller: _cipIpIdController,
                                     maxLength: 2,
+                                  ),
+                                  buildInputRow(
+                                    label: '脉冲保持时长(ms)',
+                                    controller: _cipPulseHoldMsController,
+                                    isNumber: true,
+                                    maxLength: 4,
+                                    hintText: 'VTP 点按钮的保持时长，过小中控收不到',
                                   ),
                                   buildPageVisibilitySwitch(
                                     title: '安全 CIP (SCIP / 4系列)',

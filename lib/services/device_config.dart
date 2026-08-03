@@ -69,11 +69,12 @@ class BrandConfig {
 /// ============================================================
 class ConfigDefaults {
   // ---- 网络 / 设备 ----
-  static const String deviceIp = '192.168.0.64'; // 直连设备默认 IP（网关/设备地址）
+  static const String deviceIp = '192.168.0.200'; // 直连设备默认 IP（网关/设备地址）
   static const int devicePort = 5000; // 直连设备默认 TCP 端口（品牌可覆盖）
   static const int viscaPort = 52381; // 摄像头 VISCA over IP 端口
   static const int cipPort = 41794; // Crestron 明文 CIP 端口
-  static const int cipIpId = 0x0A; // Crestron IP-ID（0x00-0xFF）
+  static const int cipIpId = 0x03; // Crestron IP-ID（0x00-0xFF）
+  static const int cipPulseHoldMs = 80; // VTP 脉冲保持时长(ms)，见 setCipPulseHoldMs
 
   // ---- 默认品牌（与上方 *BrandConfigs 列表首项保持一致）----
   static const String brandDefault = '默认品牌';
@@ -717,6 +718,17 @@ class DeviceConfig extends ChangeNotifier {
   void setCipPassword(String value) {
     _cipPassword = value;
     _saveString('cipPassword', value);
+    notifyListeners();
+  }
+
+  /// VTP 模式下数字 join 脉冲（pulse）的保持时长（毫秒）。
+  /// Crestron 处理器按扫描周期采样数字信号；脉冲保持过短（≈0ms）会被直接跳过，
+  /// 表现为"VTP 已连接但点按钮中控没反应"。默认 80ms（可在配置页调大，最大 2000）。
+  int _cipPulseHoldMs = ConfigDefaults.cipPulseHoldMs;
+  int get cipPulseHoldMs => _cipPulseHoldMs;
+  void setCipPulseHoldMs(int value) {
+    _cipPulseHoldMs = value.clamp(0, 2000);
+    _saveInt('cipPulseHoldMs', _cipPulseHoldMs);
     notifyListeners();
   }
 
@@ -1643,6 +1655,7 @@ class DeviceConfig extends ChangeNotifier {
     _cipSecure = _loadBool('cipSecure', ConfigDefaults.cipSecure);
     _cipUsername = _loadString('cipUsername', ConfigDefaults.cipUsername);
     _cipPassword = _loadString('cipPassword', ConfigDefaults.cipPassword);
+    _cipPulseHoldMs = _loadInt('cipPulseHoldMs', ConfigDefaults.cipPulseHoldMs);
     _crestronMode = _loadBool('crestronMode', ConfigDefaults.crestronMode);
     _joinPowerOn = _loadInt('joinPowerOn', ConfigDefaults.joinPowerOn);
     _joinPowerOff = _loadInt('joinPowerOff', ConfigDefaults.joinPowerOff);

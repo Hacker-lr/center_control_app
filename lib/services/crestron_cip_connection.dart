@@ -31,10 +31,12 @@ import 'device_config.dart';
 /// ============================================================
 
 /// Join 变化回调类型
-typedef CipJoinCallback = void Function(String sigtype, int join, dynamic value);
+typedef CipJoinCallback =
+    void Function(String sigtype, int join, dynamic value);
 
 class CrestronCipConnection extends BaseConnection {
-  static final CrestronCipConnection _instance = CrestronCipConnection._internal();
+  static final CrestronCipConnection _instance =
+      CrestronCipConnection._internal();
   factory CrestronCipConnection() => _instance;
   CrestronCipConnection._internal();
 
@@ -151,7 +153,9 @@ class CrestronCipConnection extends BaseConnection {
     switch (type) {
       case 0x0F:
         // 服务器注册请求 → 回应注册包（含 IP-ID）
-        _logEvent('收到注册请求(0x0F)，发送 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 注册包');
+        _logEvent(
+          '收到注册请求(0x0F)，发送 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 注册包',
+        );
         _send(_buildRegistration(_config.cipIpId));
         break;
       case 0x02:
@@ -160,8 +164,10 @@ class CrestronCipConnection extends BaseConnection {
           _logEvent('注册成功，发送 update request');
           _send(_buildUpdateRequest());
         } else if (_eq(payload, [0xff, 0xff, 0x02])) {
-          _logEvent('✗ IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 在处理器上不存在！'
-              '请核对 SIMPL 程序中 XPanel 符号的 IP-ID（注意它是十六进制）');
+          _logEvent(
+            '✗ IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 在处理器上不存在！'
+            '请核对 SIMPL 程序中 XPanel 符号的 IP-ID（注意它是十六进制）',
+          );
           notifyConnectionError();
         } else {
           _logEvent('✗ 注册失败: ${_hex(payload)}');
@@ -184,7 +190,9 @@ class CrestronCipConnection extends BaseConnection {
         break;
       default:
         // 未知类型。安全模式下可能是认证挑战包，记录下来供抓包分析
-        debugPrint('[Cip] 未处理包类型 0x${type.toRadixString(16)}: ${_hex(payload)}');
+        debugPrint(
+          '[Cip] 未处理包类型 0x${type.toRadixString(16)}: ${_hex(payload)}',
+        );
         // ⚠️ 仅 4 系列 + cipSecure 时进入；调用的认证桩为未验证实现，
         // 切勿在生产环境依赖其正确性（详见 _handleAuthChallenge 顶部说明）
         if (_config.cipSecure) _handleAuthChallenge(type, payload);
@@ -240,7 +248,7 @@ class CrestronCipConnection extends BaseConnection {
   /// d: value 0/1（或 bool）；a: 0-65535；s: 字符串
   Future<void> set(String sigtype, int join, dynamic value) async {
     if (!_cipConnected) {
-      debugPrint('[Cip] 尚未完成握手，忽略 set($sigtype,$join)');
+      _logEvent('⚠️ 忽略 set($sigtype,$join)：CIP 尚未握手完成');
       return;
     }
     Uint8List pkt;
@@ -265,27 +273,47 @@ class CrestronCipConnection extends BaseConnection {
         debugPrint('[Cip] 未知信号类型: $sigtype');
         return;
     }
+    _logEvent('→ $sigtype$join = $value  [${_hex(pkt)}]');
     await _send(pkt);
   }
 
-  /// 数字 join 脉冲：高→立即低
-  Future<void> pulse(int join) async {
+  /// 数字 join 脉冲：高 → 保持 [hold] → 低。
+  /// 必须保持一小段时间（默认由 DeviceConfig.cipPulseHoldMs 控制，约 80ms），
+  /// 否则 Crestron 处理器按扫描周期采样，≈0 时长的脉冲会被直接跳过，
+  /// 中控收不到点击指令。保持时长可在配置页调整。
+  Future<void> pulse(int join, {Duration? hold}) async {
+    if (!_cipConnected) {
+      _logEvent('⚠️ 忽略 pulse(d$join)：CIP 尚未握手完成');
+      return;
+    }
+    final Duration h = hold ?? Duration(milliseconds: _config.cipPulseHoldMs);
     await set('d', join, 1);
+    await Future.delayed(h);
     await set('d', join, 0);
   }
 
-  /// 模拟触摸面板“按下”（按钮型数字 join，保持高直到 release）
+  /// 模拟触摸面板"按下"（按钮型数字 join，保持高直到 release）
   Future<void> press(int join) async {
-    if (!_cipConnected) return;
-    await _send(_buildDigital(join, 1, button: true));
+    if (!_cipConnected) {
+      _logEvent('⚠️ 忽略 press(d$join)：CIP 尚未握手完成');
+      return;
+    }
+    final Uint8List pkt = _buildDigital(join, 1, button: true);
+    _logEvent('↓ press d$join  [${_hex(pkt)}]');
     _recordOut('d', join, 1);
+    await _send(pkt);
   }
 
-  /// 模拟触摸面板“释放”
+  /// 模拟触摸面板"释放"
   Future<void> release(int join) async {
-    if (!_cipConnected) return;
-    await _send(_buildDigital(join, 0, button: true));
+    if (!_cipConnected) {
+      _logEvent('⚠️ 忽略 release(d$join)：CIP 尚未握手完成');
+      return;
+    }
+    final Uint8List pkt = _buildDigital(join, 0, button: true);
+    _logEvent('↑ release d$join  [${_hex(pkt)}]');
     _recordOut('d', join, 0);
+    await _send(pkt);
   }
 
   /// 读取 join 当前状态（direction: 'in' 入站 / 'out' 出站）
@@ -383,16 +411,26 @@ class CrestronCipConnection extends BaseConnection {
   Uint8List _buildRegistration(int ipid) {
     // 0x01 注册包：payload = 00 00 00 00 00 <ipid> 40 ff ff f1 01
     final payload = [
-      0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
       ipid & 0xFF,
-      0x40, 0xff, 0xff, 0xf1, 0x01,
+      0x40,
+      0xff,
+      0xff,
+      0xf1,
+      0x01,
     ];
     return _frame(0x01, payload);
   }
 
-  Uint8List _buildUpdateRequest() => _frame(0x05, [0x00, 0x00, 0x02, 0x03, 0x00]);
+  Uint8List _buildUpdateRequest() =>
+      _frame(0x05, [0x00, 0x00, 0x02, 0x03, 0x00]);
 
-  Uint8List _buildEndOfQueryAck() => _frame(0x05, [0x00, 0x00, 0x02, 0x03, 0x1d]);
+  Uint8List _buildEndOfQueryAck() =>
+      _frame(0x05, [0x00, 0x00, 0x02, 0x03, 0x1d]);
 
   Uint8List _buildPing() => _frame(0x0D, [0x00, 0x00]);
 
@@ -410,9 +448,14 @@ class CrestronCipConnection extends BaseConnection {
   Uint8List _buildAnalog(int join, int value) {
     final int cip = join - 1;
     final payload = [
-      0x00, 0x00, 0x05, 0x14,
-      (cip >> 8) & 0xFF, cip & 0xFF,
-      (value >> 8) & 0xFF, value & 0xFF,
+      0x00,
+      0x00,
+      0x05,
+      0x14,
+      (cip >> 8) & 0xFF,
+      cip & 0xFF,
+      (value >> 8) & 0xFF,
+      value & 0xFF,
     ];
     return _frame(0x05, payload);
   }
@@ -446,7 +489,8 @@ class CrestronCipConnection extends BaseConnection {
   }
 
   // 复用基类统一的字节→十六进制格式化
-  String _hex(List<int> data) => data.map((b) => BaseConnection.hexByte(b)).join(' ');
+  String _hex(List<int> data) =>
+      data.map((b) => BaseConnection.hexByte(b)).join(' ');
 
   // ===================== 4 系列安全认证（待验证） =====================
   // 说明：4 系列处理器若开启“身份验证”，在 TLS 连接之上还需一次
@@ -459,7 +503,8 @@ class CrestronCipConnection extends BaseConnection {
   // 与 [_sendAuthResponse] 即可，无需改动其它逻辑。
 
   void _handleAuthChallenge(int type, Uint8List payload) {
-    final String log = 'AUTH type=0x${type.toRadixString(16)}: ${_hex(payload)}';
+    final String log =
+        'AUTH type=0x${type.toRadixString(16)}: ${_hex(payload)}';
     debugPrint('[Cip] $log');
     _authLog.add(log);
     if (_authLog.length > 50) _authLog.removeAt(0);
