@@ -516,13 +516,14 @@ class CrestronCipConnection extends BaseConnection {
     switch (reject) {
       case 0x40:
         if (_config.cipSecure) {
-          return '\n   原因：注册被拒（0x40）。可能：① SIMPL 程序里没有把 IP-ID '
-              '0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} '
-              '分配给 XPanel/Control System；② CP4 启用了身份验证但 App 未完成挑战-应答；'
-              '③ IP-ID 已被其他 client 占用。请检查 CP4 的 System Info → Networked Devices → '
-              'CIP Identity Settings（IP-ID 列表 / 用户名密码）。';
+          return '\n   原因：注册被拒（0x40，SCIP 加密模式）。最可能：CP4 启用了身份验证但 App 未通过挑战-应答，'
+              '注册包被拒。\n   建议：① 在 CP4 控制台进入 System Info → Networked Devices → CIP Identity Settings，'
+              '临时把 "Require Authentication" 关掉或勾选 "Allow Anonymous Access"，再重试；'
+              '② 或者在 App 配置页中控主机区填写 CIP 用户名/密码（需要 CP4 端先抓包确认 challenge 格式才能生效）；'
+              '③ 确认 App 端 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} '
+              '在 SIMPL 程序中已分配给 XPanel/Control System。';
         }
-        return '\n   原因：注册被拒（0x40）。可能：① SIMPL 程序里没有把 IP-ID '
+        return '\n   原因：注册被拒（0x40，明文 CIP）。可能：① SIMPL 程序里没有把 IP-ID '
             '0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} '
             '分配给 XPanel/Control System；② IP-ID 已被其他 client 占用。';
       case 0x41:
