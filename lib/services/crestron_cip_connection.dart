@@ -170,7 +170,7 @@ class CrestronCipConnection extends BaseConnection {
           );
           notifyConnectionError();
         } else {
-          _logEvent('✗ 注册失败: ${_hex(payload)}');
+          _logEvent('✗ 注册失败: ${_hex(payload)}${_explainReject(payload)}');
           notifyConnectionError();
         }
         break;
@@ -493,14 +493,48 @@ class CrestronCipConnection extends BaseConnection {
       data.map((b) => BaseConnection.hexByte(b)).join(' ');
 
   // ===================== 4 系列安全认证（待验证） =====================
-  // 说明：4 系列处理器若开启“身份验证”，在 TLS 连接之上还需一次
+  // 说明：4 系列处理器若开启"身份验证"，在 TLS 连接之上还需一次
   // 挑战-应答。下方为常见社区逆向实现的结构占位：
   //   1) TLS 连接后，处理器发来挑战包（含随机 nonce / 用户名提示）
   //   2) 客户端用密码对挑战做哈希，连同用户名回传
   //   3) 处理器回 0x02 接受 / 0x04 拒绝
-  // 由于各固件挑战包格式不完全公开，下列实现以“记录挑战数据”为主，
+  // 由于各固件挑战包格式不完全公开，下列实现以"记录挑战数据"为主，
   // 待你用 Wireshark 抓到真实握手包后，仅需调整 [_computeAuthResponse]
   // 与 [_sendAuthResponse] 即可，无需改动其它逻辑。
+
+  /// 解析 CIP 注册结果（0x02 帧 payload）并给出可读原因。
+  /// 常见 reject reason codes（参考 Crestron CIP 逆向文档）：
+  ///   0x40 = Generic / Server Reject（IP-ID 未在 SIMPL 程序中定义 / 已被占用 / 需先认证）
+  ///   0x41 = Out of resources
+  ///   0x42 = Slot error
+  ///   0x43 = Unreachable
+  String _explainReject(List<int> payload) {
+    if (payload.isEmpty) return '';
+    // payload 末尾的 reject code 是 5 字节布局中的第 4 个字节
+    //   layout: [ipid_hi, ipid_mid, ipid_lo, reject_code, 0x1F]
+    final int reject = payload.length >= 4 ? payload[payload.length - 2] : 0;
+    switch (reject) {
+      case 0x40:
+        if (_config.cipSecure) {
+          return '\n   原因：注册被拒（0x40）。可能：① SIMPL 程序里没有把 IP-ID '
+              '0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} '
+              '分配给 XPanel/Control System；② CP4 启用了身份验证但 App 未完成挑战-应答；'
+              '③ IP-ID 已被其他 client 占用。请检查 CP4 的 System Info → Networked Devices → '
+              'CIP Identity Settings（IP-ID 列表 / 用户名密码）。';
+        }
+        return '\n   原因：注册被拒（0x40）。可能：① SIMPL 程序里没有把 IP-ID '
+            '0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} '
+            '分配给 XPanel/Control System；② IP-ID 已被其他 client 占用。';
+      case 0x41:
+        return '\n   原因：处理器资源不足（0x41）';
+      case 0x42:
+        return '\n   原因：槽位错误（0x42）';
+      case 0x43:
+        return '\n   原因：目标不可达（0x43）';
+      default:
+        return '\n   原因：未知 reject code 0x${reject.toRadixString(16)}';
+    }
+  }
 
   void _handleAuthChallenge(int type, Uint8List payload) {
     final String log =
