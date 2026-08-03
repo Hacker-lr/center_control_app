@@ -17,17 +17,21 @@ import 'device_config.dart';
 /// 协议帧格式（基于 python-cipclient 逆向，逐字节核对）：
 ///   [type:1][length:2 大端][payload:length]
 ///
-/// 握手顺序（未加密 / SCIP 在 TLS 之上帧格式相同）：
-///   连接 → 处理器发 0x0F(注册请求)
-///        → 客户端回 0x01(注册包，含 IP-ID)
-///        → 处理器回 0x02(成功 = 00 00 00 1F)
-///        → 客户端发 0x05(update request)
-///        → 处理器回 0x1C(end-of-query)
-///        → 客户端回 0x1D + 心跳 0x0D，置应用层 connected，重发所有 out join
+/// 握手顺序：
+///   明文 CIP（3 系列 / 关闭验证）：
+///     连接 → 处理器发 0x0F(注册请求)
+///          → 客户端回 0x01(注册包，含 IP-ID)
+///          → 处理器回 0x02(成功 = 00 00 00 1F)
+///          → 客户端发 0x05(update request) → 处理器回 0x1C → 0x1D + 心跳
 ///
-/// 注意：4 系列处理器若开启“身份验证”，在 TLS 之上还需一次挑战-应答认证。
-///       本类已实现 TLS 传输与 CIP 帧，认证桩见 [_handleAuthChallenge] /
-///       [_computeAuthResponse]，其具体哈希算法需以真实抓包为准（见文件末尾说明）。
+///   SCIP（4 系列 / 41796 加密，开启身份验证）：
+///     TLS 连接 → 客户端先发 0x0B 登录包(username:password)
+///             → 处理器回 0x0C(成功 = 00 00 01)
+///             → 处理器发 0x0F(注册请求)
+///             → 客户端回 0x01(注册包，含 IP-ID)
+///             → 处理器回 0x02(成功 = 00 00 00 1F)
+///     登录包格式（参考 scip2cip 逆向，逐字节核对）：
+///       0x0B 00 `<len>` 00 00 `<username:password ASCII>` 00 00 00
 /// ============================================================
 
 /// Join 变化回调类型
@@ -64,6 +68,9 @@ class CrestronCipConnection extends BaseConnection {
 
   /// 安全认证调试日志（4 系列抓包用）
   final List<String> _authLog = [];
+
+  /// SCIP 登录包(0x0B)是否已发送，避免重复发送
+  bool _loginSent = false;
 
   // ===================== 基类抽象属性实现 =====================
 
@@ -119,14 +126,40 @@ class CrestronCipConnection extends BaseConnection {
   @override
   void onTransportConnected() {
     _rxBuffer.clear();
+    _loginSent = false;
     _setCipConnected(false);
     _logEvent('TCP 已连接 $deviceIp:$devicePort，等待处理器注册请求(0x0F)...');
+    // SCIP（4 系列加密）模式：TLS 连上后立即发送 0x0B 登录包完成身份验证，
+    // 否则 CP4 在收到 0x01 注册包时会以 0x40 reject（未认证）。
+    // 参考 scip2cip 项目逆向：登录包格式 0x0B 00 `<len>` 00 00 `<user:pass>` 00 00 00
+    if (_config.cipSecure) {
+      _sendLoginPacket();
+    }
+  }
+
+  /// 构造并发送 SCIP 0x0B 登录包（含 username:password）
+  Future<void> _sendLoginPacket() async {
+    if (_loginSent) return;
+    _loginSent = true;
+    final Uint8List pkt = _buildLoginPacket();
+    _logEvent('→ SCIP 登录包 [${_hex(pkt)}]');
+    await _send(pkt);
+  }
+
+  /// SCIP 登录包（参考 scip2cip 逆向实现的字节结构）
+  /// 帧：0x0B 00 `<len>` 00 00 `<username:password>` 00 00 00
+  Uint8List _buildLoginPacket() {
+    final String cred = '${_config.cipUsername}:${_config.cipPassword}';
+    final List<int> credBytes = cred.codeUnits;
+    final List<int> payload = [0x00, 0x00, ...credBytes, 0x00, 0x00, 0x00];
+    return _frame(0x0B, payload);
   }
 
   /// 传输层断开：复位握手状态与接收缓冲，避免重连后解析错乱
   @override
   void onTransportDisconnected() {
     _rxBuffer.clear();
+    _loginSent = false;
     _setCipConnected(false);
   }
 
@@ -151,10 +184,27 @@ class CrestronCipConnection extends BaseConnection {
 
   void _handlePacket(int type, Uint8List payload) {
     switch (type) {
+      case 0x0C:
+        // SCIP 登录响应（参考 scip2cip：成功 = 0C 00 03 00 00 01）。
+        // 仅记录，不主动断开——真正的成功/失败由后续 0x02 注册结果裁定，
+        // 避免把固件变体下的成功码误判为失败而断连。
+        if (_eq(payload, [0x00, 0x00, 0x01])) {
+          _logEvent('✓ SCIP 登录成功(0x0C)，等待注册请求(0x0F)…');
+        } else {
+          _logEvent(
+            '收到 0x0C 登录响应(非标准成功码): ${_hex(payload)}'
+            '（若后续注册仍被拒，请检查 CP4 用户名/密码是否正确）',
+          );
+        }
+        break;
       case 0x0F:
         // 服务器注册请求 → 回应注册包（含 IP-ID）
+        // SCIP 模式下若登录包尚未发出（理论上 onTransportConnected 已发），补发一次
+        if (_config.cipSecure && !_loginSent) {
+          _sendLoginPacket();
+        }
         _logEvent(
-          '收到注册请求(0x0F)，发送 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 注册包',
+          '收到注册请求(0x0F)，payload=${_hex(payload)}，发送 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 注册包',
         );
         _send(_buildRegistration(_config.cipIpId));
         break;
@@ -492,15 +542,11 @@ class CrestronCipConnection extends BaseConnection {
   String _hex(List<int> data) =>
       data.map((b) => BaseConnection.hexByte(b)).join(' ');
 
-  // ===================== 4 系列安全认证（待验证） =====================
-  // 说明：4 系列处理器若开启"身份验证"，在 TLS 连接之上还需一次
-  // 挑战-应答。下方为常见社区逆向实现的结构占位：
-  //   1) TLS 连接后，处理器发来挑战包（含随机 nonce / 用户名提示）
-  //   2) 客户端用密码对挑战做哈希，连同用户名回传
-  //   3) 处理器回 0x02 接受 / 0x04 拒绝
-  // 由于各固件挑战包格式不完全公开，下列实现以"记录挑战数据"为主，
-  // 待你用 Wireshark 抓到真实握手包后，仅需调整 [_computeAuthResponse]
-  // 与 [_sendAuthResponse] 即可，无需改动其它逻辑。
+  // ===================== 4 系列安全认证（SCIP 0x0B 登录） =====================
+  // 标准 SCIP 登录已在握手阶段通过 [_buildLoginPacket]/[_sendLoginPacket] 实现：
+  //   TLS 连上后客户端发 0x0B 登录包(username:password)，CP4 回 0x0C 表示成功。
+  // 下方 [_handleAuthChallenge] 仅作为“未知包类型”的兜底记录，供个别固件变体联调；
+  // 它不会主动发送任何帧（[_sendAuthResponse] 仅打印），不影响 0x0B 主流程。
 
   /// 解析 CIP 注册结果（0x02 帧 payload）并给出可读原因。
   /// 常见 reject reason codes（参考 Crestron CIP 逆向文档）：

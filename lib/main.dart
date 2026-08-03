@@ -107,6 +107,23 @@ class _MainPageState extends State<MainPage> {
   /// 记录上一次的 Crestron 双模式状态，用于检测开关变化以连接/断开全局 CIP
   bool _crestronModeActive = false;
 
+  /// 记录上一次 CIP 连接身份配置，用于检测凭据/IP-ID/端口等变化后自动重连
+  String _cipHost = '';
+  int _cipPort = 0;
+  int _cipIpId = 0;
+  bool _cipSecure = false;
+  String _cipUsername = '';
+  String _cipPassword = '';
+
+  void _captureCipIdentity() {
+    _cipHost = _config.cipHost;
+    _cipPort = _config.cipPort;
+    _cipIpId = _config.cipIpId;
+    _cipSecure = _config.cipSecure;
+    _cipUsername = _config.cipUsername;
+    _cipPassword = _config.cipPassword;
+  }
+
   final DeviceConfig _config = DeviceConfig();
   final DeviceConnection _deviceConnection = DeviceConnection.timingPower;
   final DeviceConnection _ledPowerConnection = DeviceConnection.ledPower;
@@ -262,6 +279,21 @@ class _MainPageState extends State<MainPage> {
       }
     }
 
+    // 已处于中控模式时，若 CIP 连接身份相关配置发生变化（用户名/密码/IP-ID/
+    // 端口/加密开关等），自动重连以应用新凭据，无需手动开关 VTP 模式
+    if (_crestronModeActive) {
+      if (_cipHost != _config.cipHost ||
+          _cipPort != _config.cipPort ||
+          _cipIpId != _config.cipIpId ||
+          _cipSecure != _config.cipSecure ||
+          _cipUsername != _config.cipUsername ||
+          _cipPassword != _config.cipPassword) {
+        _captureCipIdentity();
+        _cipConnection.disconnect();
+        _cipConnection.connect();
+      }
+    }
+
     // 确保当前索引在有效范围内
     final int count = _pageCount;
     if (count == 0) {
@@ -307,6 +339,15 @@ class _MainPageState extends State<MainPage> {
     _config.ensureLoaded().then((_) {
       if (!mounted) return;
       _cameraManager.rebuild();
+      // 配置异步加载完成后，若处于中控模式，用真实凭据重连 CIP。
+      // 否则 initState 早期那次 connect() 会用默认空凭据建立连接，
+      // 之后永不重连，导致 SCIP 登录一直发空用户名/密码而被 0x40 reject。
+      if (_config.crestronMode) {
+        _crestronModeActive = true;
+        _captureCipIdentity();
+        _cipConnection.disconnect();
+        _cipConnection.connect();
+      }
       // 等首帧布局完成后再触发当前页 onConnect（摄像头此时已用真实配置就绪）
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
