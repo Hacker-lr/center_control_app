@@ -8,7 +8,7 @@ import '../services/device_config.dart';
 ///
 /// 在 Crestron VTP 模式下，所有设备控制页顶部的连接状态提示
 /// 统一使用本组件，保证文案、颜色、字号、图标完全一致：
-///   - 已连接：绿色 + 心跳计数
+///   - 已连接：绿色
 ///   - 连接中：橙色
 ///   - 连接失败：红色（自动重连中）
 ///   - 未连接：灰色
@@ -25,32 +25,40 @@ class CrestronStatusChip extends StatelessWidget {
     return ListenableBuilder(
       listenable: cip,
       builder: (context, child) {
+        // 以应用层(CIP 握手)是否完成作为“已连接”的唯一判据，
+        // 与 crestron_page 的 _cip.isCipConnected 保持一致，
+        // 避免“控制页显示已连接、crestron 页显示未连接”的不一致。
+        // （传输层 socket 连上 ≠ CIP 握手完成，后者才可真正收发指令。）
+        final bool cipOk = cip.isCipConnected;
         final ConnectionStatus status = cip.status;
         String statusText;
         Color statusColor;
         IconData statusIcon;
 
-        switch (status) {
-          case ConnectionStatus.connected:
-            statusText = 'Crestron 中控已连接';
-            statusColor = DeviceConfig.colorStatusConnected;
-            statusIcon = Icons.link;
-            break;
-          case ConnectionStatus.connecting:
-            statusText = '正在连接 Crestron 中控...';
-            statusColor = DeviceConfig.colorStatusConnecting;
-            statusIcon = Icons.sync;
-            break;
-          case ConnectionStatus.error:
-            statusText = 'Crestron 中控连接失败，自动重连中...';
-            statusColor = DeviceConfig.colorStatusError;
-            statusIcon = Icons.error_outline;
-            break;
-          case ConnectionStatus.disconnected:
-            statusText = 'Crestron 中控未连接';
-            statusColor = Colors.grey[500]!;
-            statusIcon = Icons.link_off;
-            break;
+        if (cipOk) {
+          statusText = 'Crestron 中控已连接';
+          statusColor = DeviceConfig.colorStatusConnected;
+          statusIcon = Icons.link;
+        } else {
+          // CIP 握手未完成：按传输层状态细分，socket 已通但握手未完仍算“连接中”
+          switch (status) {
+            case ConnectionStatus.connecting:
+            case ConnectionStatus.connected:
+              statusText = '正在连接 Crestron 中控...';
+              statusColor = DeviceConfig.colorStatusConnecting;
+              statusIcon = Icons.sync;
+              break;
+            case ConnectionStatus.error:
+              statusText = 'Crestron 中控连接失败，自动重连中...';
+              statusColor = DeviceConfig.colorStatusError;
+              statusIcon = Icons.error_outline;
+              break;
+            case ConnectionStatus.disconnected:
+              statusText = 'Crestron 中控未连接';
+              statusColor = Colors.grey[500]!;
+              statusIcon = Icons.link_off;
+              break;
+          }
         }
 
         return Container(
@@ -75,14 +83,6 @@ class CrestronStatusChip extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              // 已连接时显示心跳计数
-              if (status == ConnectionStatus.connected) ...[
-                const SizedBox(width: 8),
-                Text(
-                  '心跳 #${cip.heartbeatCount}',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                ),
-              ],
             ],
           ),
         );

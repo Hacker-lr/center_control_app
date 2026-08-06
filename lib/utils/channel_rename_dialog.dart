@@ -44,7 +44,7 @@ Future<void> showRenameDialog(
         '重命名 $typeName$channelNumber',
         style: TextStyle(color: Colors.grey[200]),
       ),
-      // 对话框内容：多行文本输入框（支持换行、上限 20 字）
+      // 对话框内容：多行文本输入框（上限取全局配置，保证两行内完整显示）
       // 用 ConstrainedBox 限制最大高度 + SingleChildScrollView 兜底，
       // 多行输入时不撑爆对话框
       content: ConstrainedBox(
@@ -62,7 +62,7 @@ Future<void> showRenameDialog(
             keyboardType: TextInputType.multiline,
             textInputAction: TextInputAction.newline,
             textAlign: TextAlign.center,
-            // 限制输入长度，最大值取自全局配置（20）
+            // 限制输入长度，最大值取自全局配置（两行内完整显示的字数上限）
             maxLength: DeviceConfig().channelNameMaxLength,
             // 输入框字体跟随窗口缩放（自适应）
             style: TextStyle(
@@ -71,8 +71,8 @@ Future<void> showRenameDialog(
             ),
             // 输入框装饰配置
             decoration: InputDecoration(
-              // 输入框提示文字
-              hintText: '请输入新名称（最多40字，支持回车换行）',
+              // 输入框提示文字（上限与全局配置一致，保证两行内完整显示）
+              hintText: '请输入新名称（最多${DeviceConfig().channelNameMaxLength}字，两行内完整显示）',
               hintStyle: TextStyle(color: Colors.grey[500]),
               // 输入框未聚焦时的边框样式
               enabledBorder: OutlineInputBorder(

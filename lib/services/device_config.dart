@@ -91,19 +91,26 @@ class ConfigDefaults {
   static const int joinLayoutSplit3 = 555; // 三分屏
   static const int joinLayoutSplit4 = 556; // 四分屏
   static const int joinLayoutSplit5 = 557; // 五分屏
-  static const int joinMatrixInputBase = 50; // 输入 X → base + X 脉冲
-  static const int joinMatrixOutputBase = 130; // 输出 Y → base + Y 脉冲
+  static const int joinMatrixInputBase = 50; // 输入 X(1基) → base + X - 1（第1路=基址）
+  static const int joinMatrixOutputBase = 130; // 输出 Y(1基) → base + Y - 1（第1路=基址）
   static const int joinCamUp = 524; // 云台 上
   static const int joinCamDown = 525; // 云台 下
   static const int joinCamLeft = 526; // 云台 左
   static const int joinCamRight = 527; // 云台 右
   static const int joinCamTele = 528; // 变焦 推近
   static const int joinCamWide = 529; // 变焦 拉远
-  static const int joinCamPresetRecallBase = 530; // 预置位 N → base + N
+  static const int joinCamPresetRecallBase = 530; // 预置位 N(1基) → base + N - 1（第1个=基址）
   static const int joinCamSpeedLow = 521; // 速度 低速
   static const int joinCamSpeedHigh = 522; // 速度 高速
   static const int joinCamSaveBtn = 523; // 预置位保存按钮
-  static const int joinCamSelectBase = 510; // 摄像机 X → base + X 脉冲
+  static const int joinCamSelectBase = 510; // 摄像机 X(1基) → base + X - 1（第1台=基址）
+
+  // 页面选择导航按钮的 join 基址（中控模式）：
+  // 每个【显示中】的页面（底部导航按钮）分配一个数字 join = 基址 + 可见序号，
+  // 可见序号从 0 开始、按页面在导航栏中的出现顺序递增；隐藏的页面不参与（不占号）。
+  // 基址默认 1 → 第 1 个可见页（电源控制）对应 join 1。
+  // 点击某页导航按钮 → 脉冲该 join；中控置该 join 为高 → App 切到对应页（双向）。
+  static const int joinPageSelectBase = 1;
 
   // ---- 页面 / 区块显示开关（true=显示）----
   static const bool showPowerControl = true;
@@ -198,7 +205,11 @@ class ConfigDefaults {
   // ---- 按钮交互 ----
   static const int longPressDurationMs = 2000;
   static const int longPressTickIntervalMs = 50;
-  static const int channelNameMaxLength = 40;
+  /// 通道名称字数上限。
+  /// 依据：全屏 8 列最窄按钮（约 45px 宽），实测 SimHei 下 15 个中文字
+  /// 2 行完整显示的最大字号为 4.73px（渲染端 ×0.95 保险后约 4.5px）——
+  /// 保证"最多两行 + 完整显示"同时成立。
+  static const int channelNameMaxLength = 15;
 }
 
 /// ============================================================
@@ -233,6 +244,7 @@ class ConfigDefaults {
 ///   摄像机变焦    ：推近 528 / 拉远 529
 ///   摄像机预置位  ：调出基址 530（预置位 N → 530 + N）
 ///   摄像机速度    ：低速 521 / 高速 522 / 保存 523
+///   页面选择导航  ：基址 0（可见页 i → 0 + i；隐藏页不占号；点按脉冲 / 中控置高切页）
 ///   说明          ：基址类 join 均为「基址 + 偏移」形式；分屏六个按钮各有独立 join（非基址）。
 ///   时序电源、矩阵、大屏、摄像头等"直连设备"字段仅在 crestronMode 关闭时启用。
 /// ============================================================
@@ -742,16 +754,16 @@ class DeviceConfig extends ChangeNotifier {
   /// 映射规则（与 Crestron VTP 一致）：
   ///   - 电源开/关           → 数字 join（脉冲 pulse）
   ///   - 大屏分屏模式(全屏/16:9/二分/三分/四分/五分) → 各自独立数字 join（脉冲）
-  ///   - 矩阵 输入X 按下      → 数字 join = joinMatrixInputBase + X（脉冲）
-  ///   - 矩阵 输出Y 按下      → 数字 join = joinMatrixOutputBase + Y（脉冲）
+  ///   - 矩阵 输入X(1基)按下   → 数字 join = joinMatrixInputBase + X - 1（脉冲，第1路=基址）
+  ///   - 矩阵 输出Y(1基)按下   → 数字 join = joinMatrixOutputBase + Y - 1（脉冲，第1路=基址）
   ///     （具体路由切换逻辑由中控程序根据"最后按下的输入"完成，与真实 Crestron 面板一致）
   ///   - 云台 上/下/左/右      → 数字 join（按下 press / 抬起 release）
   ///   - 变焦 放大/缩小        → 数字 join（press / release）
-  ///   - 预置位 N（调用/保存共用）→ 数字 join = 预置位基址 + N（脉冲）
+  ///   - 预置位 N(1基)（调用/保存共用）→ 数字 join = 预置位基址 + N - 1（脉冲，第1个=基址）
   ///     保存与调用发同一个 join，中控根据"保存按钮"join 的待命状态区分语义
   ///   - 速度 低速/高速        → 数字 join（脉冲，两个独立按钮）
   ///   - 保存按钮              → 数字 join（脉冲，点击进入/退出保存待命时上报）
-  ///   - 摄像机选择 X          → 数字 join = joinCamSelectBase + X（脉冲）
+  ///   - 摄像机选择 X(1基)     → 数字 join = joinCamSelectBase + X - 1（脉冲，第1台=基址）
   /// ============================================================
 
   /// Crestron VTP 双模式总开关
@@ -939,6 +951,16 @@ class DeviceConfig extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- 页面选择导航按钮：数字 join 基址（中控模式下每个可见页一个 join）----
+  // 基址允许为 0（默认），即第一页 join = 0；隐藏页面不占号。
+  int _joinPageSelectBase = ConfigDefaults.joinPageSelectBase;
+  int get joinPageSelectBase => _joinPageSelectBase;
+  void setJoinPageSelectBase(int value) {
+    _joinPageSelectBase = value.clamp(1, 9999);
+    _saveInt('joinPageSelectBase', _joinPageSelectBase);
+    notifyListeners();
+  }
+
   // ---- 大屏电箱 PLC（LED 电源）：数字 join（脉冲）----
   int _joinLedPowerOn = ConfigDefaults.joinLedPowerOn; // 大屏电源开
   int get joinLedPowerOn => _joinLedPowerOn;
@@ -1116,7 +1138,7 @@ class DeviceConfig extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 心跳超时判定倍数（CIP 已用更小值重写，此处为其它设备默认值）
+  /// 心跳超时判定倍数（仅对发送心跳的设备生效；CIP 不发送心跳，故不启用）
   int _heartbeatTimeoutMultiplier = ConfigDefaults.heartbeatTimeoutMultiplier;
   int get heartbeatTimeoutMultiplier => _heartbeatTimeoutMultiplier;
   void setHeartbeatTimeoutMultiplier(int value) {
@@ -1711,6 +1733,10 @@ class DeviceConfig extends ChangeNotifier {
       'joinCamSelectBase',
       ConfigDefaults.joinCamSelectBase,
     );
+    _joinPageSelectBase = _loadInt(
+      'joinPageSelectBase',
+      ConfigDefaults.joinPageSelectBase,
+    ).clamp(1, 9999);
     _joinLedPowerOn = _loadInt('joinLedPowerOn', ConfigDefaults.joinLedPowerOn);
     _joinLedPowerOff = _loadInt(
       'joinLedPowerOff',
@@ -1951,6 +1977,7 @@ class DeviceConfig extends ChangeNotifier {
     _joinCamSpeedHigh = ConfigDefaults.joinCamSpeedHigh;
     _joinCamSaveBtn = ConfigDefaults.joinCamSaveBtn;
     _joinCamSelectBase = ConfigDefaults.joinCamSelectBase;
+    _joinPageSelectBase = ConfigDefaults.joinPageSelectBase;
     _joinLedPowerOn = ConfigDefaults.joinLedPowerOn;
     _joinLedPowerOff = ConfigDefaults.joinLedPowerOff;
     _showBigScreenFull = ConfigDefaults.showBigScreenFull;

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:crypto/crypto.dart' as crypto;
 
 import 'base_connection.dart';
 import 'device_config.dart';
@@ -19,17 +18,17 @@ import 'device_config.dart';
 ///
 /// 握手顺序：
 ///   明文 CIP（3 系列 / 关闭验证）：
-///     连接 → 处理器发 0x0F(注册请求)
-///          → 客户端回 0x01(注册包，含 IP-ID)
-///          → 处理器回 0x02(成功 = 00 00 00 1F)
+///     连接 → 处理器发 0x0F(Who-Is / 注册请求)
+///          → 客户端回 0x01(旧版 Client Sign-On 注册包，含 IP-ID)
+///          → 处理器回 0x02(Conn-Accepted，成功 = 00 00 00 1F)
 ///          → 客户端发 0x05(update request) → 处理器回 0x1C → 0x1D + 心跳
 ///
 ///   SCIP（4 系列 / 41796 加密，开启身份验证）：
 ///     TLS 连接 → 客户端先发 0x0B 登录包(username:password)
 ///             → 处理器回 0x0C(成功 = 00 00 01)
-///             → 处理器发 0x0F(注册请求)
-///             → 客户端回 0x01(注册包，含 IP-ID)
-///             → 处理器回 0x02(成功 = 00 00 00 1F)
+///             → 处理器发 0x0F(Who-Is / 注册请求)
+///             → 客户端回 0x0A(Client Sign-On 注册包，含 IP-ID)
+///             → 处理器回 0x02(Conn-Accepted，成功 = 00 00 00 1F)
 ///     登录包格式（参考 scip2cip 逆向，逐字节核对）：
 ///       0x0B 00 `<len>` 00 00 `<username:password ASCII>` 00 00 00
 /// ============================================================
@@ -50,6 +49,22 @@ class CrestronCipConnection extends BaseConnection {
   bool _cipConnected = false;
   bool get isCipConnected => _cipConnected;
 
+  /// 安全探活定时器（替代被 CP4 拒绝的 0x0D 心跳 ping）：
+  /// 周期性发送合法的 update request(0x05)，CP4 收到后会回 0x1C/0x1D 状态推送，
+  /// 从而刷新 [_lastHeartbeatResponse]；写失败(onError)秒级触发断连，
+  /// 链路静默断则看门狗(deadline 超时)兜底。
+  Timer? _probeTimer;
+
+  /// 探活发送间隔（秒）。需明显小于 [_kProbeDeadlineSeconds]，保证至少收到 1~2 次回复。
+  static const int _kProbeIntervalSeconds = 3;
+
+  /// 静默断链判定阈值（秒）：距上次收到任何数据超过该值即判定链路已死。
+  /// 取 2 倍探活间隔（6 = 2×3）：CP4 即便偶发漏回一次 update request（TCP 不会丢包，
+  /// 多半是端侧瞬时繁忙），下一个 3 秒周期内的回复仍能在 6 秒阈值内刷新时间戳，
+  /// 不会误杀；仅当连续 2 个周期（>6 秒）完全无回包才判定真断链。
+  /// 比此前纯 TCP 层 30 秒才感知、以及旧参数(间隔6/阈值18，最坏~24秒)都快很多。
+  static const int _kProbeDeadlineSeconds = 6;
+
   /// 接收缓冲区（用于跨 TCP 分片重组 CIP 帧）
   final List<int> _rxBuffer = [];
 
@@ -66,11 +81,13 @@ class CrestronCipConnection extends BaseConnection {
   /// 最近事件日志（供 UI 反馈），最多保留 200 条
   final List<String> _eventLog = [];
 
-  /// 安全认证调试日志（4 系列抓包用）
-  final List<String> _authLog = [];
-
   /// SCIP 登录包(0x0B)是否已发送，避免重复发送
   bool _loginSent = false;
+
+  /// SCIP 0x0C 登录是否已被服务器确认（收到成功码 00 00 01）。
+  /// 用于解决竞态：部分 CP4 固件会先发 0x0F(注册请求) 后发 0x0C(登录确认)，
+  /// 若此时立即回应注册包会被以 0x40 拒绝（未认证）。故注册包须等 0x0C 到达后再发。
+  bool _loginConfirmed = false;
 
   // ===================== 基类抽象属性实现 =====================
 
@@ -83,20 +100,31 @@ class CrestronCipConnection extends BaseConnection {
   @override
   bool get useTcp => true;
 
-  /// CIP 心跳包固定为 0x0D 00 02 00 00（base 心跳定时器每 heartbeatInterval 秒发送）
+  /// CIP 不发送 0x0D 心跳 ping：Crestron CP4 不兼容该简单 ping，收到即断开连接
+  /// （早期日志实证：心跳#1 → Socket已关闭）。连接保持靠 TCP 层即可，CP4 会在
+  /// join 状态变化时主动推送，无需客户端轮询 ping。置空即不发送任何心跳包。
   @override
-  String get heartbeatCommand => '0D 00 02 00 00';
+  String get heartbeatCommand => '';
+
+  /// CIP 空闲时 CP4 不主动发数据是正常行为，看门狗「无数据超时」会误杀正常连接，
+  /// 故禁用；仅依赖 TCP 层断连(onDone/onError)触发自动重连（与官方 Crestron App 一致）。
+  @override
+  bool get enableLivenessWatchdog => false;
+
+  /// CIP 永不发送心跳 ping（CP4 收到 0x0D 即断开连接）。
+  @override
+  bool get autoStartHeartbeatPings => false;
 
   @override
   bool get sendAsHex => true;
 
-  /// CIP 心跳间隔 2 秒：配合看门狗（每 1s 比对时间戳）实现约 4~5 秒内的离线感知，
-  /// 同时只是每 2 秒一个 5 字节小包，几乎不占用资源
+  /// CIP 不发送心跳 ping（详见上方 [heartbeatCommand]），故这两个基类参数当前不生效：
+  /// 真实保活由 [_kProbeIntervalSeconds]/[_kProbeDeadlineSeconds] 驱动的 0x05 探活定时器完成。
+  /// 此处保留重写仅作"若将来为 CIP 启用基类看门狗/心跳"时的预留值，日常阅读请勿误以为 CIP 在发心跳。
   @override
   int get heartbeatInterval => 2;
 
-  /// CIP 心跳超时倍数：连续 2 个周期(=10s)无响应即判定离线，
-  /// 配合 5s 间隔实现快速反馈（取值偏保守，避免正常抖动误判）
+  /// 见 [heartbeatInterval]：CIP 当前不发送心跳，此倍数不生效，由 [_kProbeDeadlineSeconds] 兜底判定静默断链。
   @override
   int get heartbeatTimeoutMultiplier => 2;
 
@@ -127,14 +155,22 @@ class CrestronCipConnection extends BaseConnection {
   void onTransportConnected() {
     _rxBuffer.clear();
     _loginSent = false;
+    _loginConfirmed = false;
     _setCipConnected(false);
     _logEvent('TCP 已连接 $deviceIp:$devicePort，等待处理器注册请求(0x0F)...');
-    // SCIP（4 系列加密）模式：TLS 连上后立即发送 0x0B 登录包完成身份验证，
-    // 否则 CP4 在收到 0x01 注册包时会以 0x40 reject（未认证）。
-    // 参考 scip2cip 项目逆向：登录包格式 0x0B 00 `<len>` 00 00 `<user:pass>` 00 00 00
-    if (_config.cipSecure) {
-      _sendLoginPacket();
-    }
+    // 诊断日志：打印实际生效的配置值，便于排查「IP-ID/凭据不对却仍被拒」类问题
+    _logEvent(
+      '配置快照: cipSecure=${_config.cipSecure}, '
+      'IP-ID=0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()}, '
+      'user=${_config.cipUsername.isEmpty ? '<空>' : _config.cipUsername}, '
+      'passLen=${_config.cipPassword.length}',
+    );
+    // ⚠️ SCIP（4 系列加密）模式：对齐官方 Crestron App 实测握手顺序——
+    //   CP4 连上即主动发 0x0F；客户端回 0x0A 注册(被 0x40 拒)→ 再发 0x0B 登录
+    //   → CP4 回 0x0C 即判定连接就绪。**不在连接时发 0x0B**（避免顺序错乱），
+    //   0x0B 仅在 0x02 收到 0x40 拒绝时由失败分支补发（见 case 0x02）。
+    //   握手完成后的 0x05 探活由 _setCipConnected 触发（见 [_setCipConnected]），
+    //   防止握手未完成就发 0x0D 被 CP4 当乱包断开。
   }
 
   /// 构造并发送 SCIP 0x0B 登录包（含 username:password）
@@ -158,8 +194,10 @@ class CrestronCipConnection extends BaseConnection {
   /// 传输层断开：复位握手状态与接收缓冲，避免重连后解析错乱
   @override
   void onTransportDisconnected() {
+    _stopProbe();
     _rxBuffer.clear();
     _loginSent = false;
+    _loginConfirmed = false;
     _setCipConnected(false);
   }
 
@@ -185,43 +223,60 @@ class CrestronCipConnection extends BaseConnection {
   void _handlePacket(int type, Uint8List payload) {
     switch (type) {
       case 0x0C:
-        // SCIP 登录响应（参考 scip2cip：成功 = 0C 00 03 00 00 01）。
-        // 仅记录，不主动断开——真正的成功/失败由后续 0x02 注册结果裁定，
-        // 避免把固件变体下的成功码误判为失败而断连。
-        if (_eq(payload, [0x00, 0x00, 0x01])) {
-          _logEvent('✓ SCIP 登录成功(0x0C)，等待注册请求(0x0F)…');
-        } else {
-          _logEvent(
-            '收到 0x0C 登录响应(非标准成功码): ${_hex(payload)}'
-            '（若后续注册仍被拒，请检查 CP4 用户名/密码是否正确）',
-          );
-        }
+        // SCIP 登录响应：CP4 仅在登录成功时回 0x0C（官方抓包实测 0C 00 03 00 00 00，
+        // scip2cip 记为 0C 00 03 00 00 01；两种成功码均视为通过）。
+        // ⚠️ 关键：官方 Crestron App 收到 0x0C 即认为连接就绪，并不等待
+        // end-of-query(0x1C)。旧逻辑死等 0x1C 导致 isCipConnected 永远为 false、
+        // 控制页无法发指令、且与 crestron 页状态打架。故此处直接判定连接成功。
+        _loginConfirmed = true;
+        _setCipConnected(true);
+        _logEvent('✓ SCIP 登录成功(0x0C)，连接就绪（CIP 应用层握手完成）');
         break;
       case 0x0F:
-        // 服务器注册请求 → 回应注册包（含 IP-ID）
-        // SCIP 模式下若登录包尚未发出（理论上 onTransportConnected 已发），补发一次
-        if (_config.cipSecure && !_loginSent) {
-          _sendLoginPacket();
-        }
+        // 服务器注册请求 → 回应注册包(0x0A，含 IP-ID)。
+        // 注意：登录包(0x0B)在此**不**发送——对齐官方 App 实测顺序：
+        //   0x0F → 发 0x0A（被 0x40 拒）→ 0x02 分支补发 0x0B → 收 0x0C。
+        // 只有「先注册(未认证)再被拒」才能触发 CP4 走完登录流程。
+        final Uint8List reg = _buildRegistration(_config.cipIpId);
         _logEvent(
-          '收到注册请求(0x0F)，payload=${_hex(payload)}，发送 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 注册包',
+          '收到注册请求(0x0F)，payload=${_hex(payload)}',
         );
-        _send(_buildRegistration(_config.cipIpId));
+        _logEvent(
+          '发送 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 注册包 [${_hex(reg)}]',
+        );
+        _send(reg);
         break;
       case 0x02:
-        // 注册结果
-        if (_eq(payload, [0x00, 0x00, 0x00, 0x1f])) {
-          _logEvent('注册成功，发送 update request');
-          _send(_buildUpdateRequest());
-        } else if (_eq(payload, [0xff, 0xff, 0x02])) {
+        // 注册结果（参考 python-cipclient 逐字节精确判定，避免把 reject 误判为成功）
+        //   成功         = ...00 1F（结尾两字节为 00 1F；标准 4 字节 = 00 00 00 1F，
+        //                          亦兼容可能的 5 字节 SCIP 变体 ...00 00 1F）
+        //   IP-ID 不存在 = FF FF 02（3 字节，无 0x1F 结尾）
+        //   其它（含 00 00 40 1F 等 reject 码）均为失败
+        // ⚠️ 注意：1F 只是成功帧的固定结尾字节，reject 帧（如 00 00 40 1F）末尾同样为 1F，
+        //    不能单凭“末尾 == 1F”判定成功——否则会把被拒注册误判为成功，
+        //    接着发 update request，CP4 因我们并未真正注册成功而回 0x03 断开 → 反复重连。
+        _logEvent('收到注册结果(0x02): [${_hex(payload)}]');
+        if (_eq(payload, [0xff, 0xff, 0x02])) {
           _logEvent(
             '✗ IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} 在处理器上不存在！'
             '请核对 SIMPL 程序中 XPanel 符号的 IP-ID（注意它是十六进制）',
           );
-          notifyConnectionError();
+          _failConnection();
+        } else if (payload.length >= 2 &&
+            payload.last == 0x1f &&
+            payload[payload.length - 2] == 0x00) {
+          // 成功：结尾两字节为 00 1F（状态字节 0x00 + 结尾标记 0x1F）
+          _logEvent('✓ 注册成功，发送 update request');
+          _send(_buildUpdateRequest());
         } else {
-          _logEvent('✗ 注册失败: ${_hex(payload)}${_explainReject(payload)}');
-          notifyConnectionError();
+          _logEvent('✗ 注册失败: [${_hex(payload)}]${_explainReject(payload)}');
+          // ⚠️ 不再 _failConnection 死循环重连：官方 App 收到 0x40 后并不断开，
+          //   而是保持连接、发出 0x0B 登录，CP4 接受后回 0x0C 即判定就绪。
+          //   本实现严格对齐官方顺序：0x0B 登录在此处(0x40 拒绝后)才发，
+          //   若已连上或已发过则跳过，避免重复(_sendLoginPacket 有 _loginSent 守卫)。
+          if (!_loginSent && !_cipConnected) _sendLoginPacket();
+          // 若 IP-ID 确未授权，CP4 不会推进，看门狗超时将正常重连；
+          // 每次重连之间给 CP4 留出推进窗口，登录被接受时通常可连上。
         }
         break;
       case 0x0D:
@@ -235,17 +290,18 @@ class CrestronCipConnection extends BaseConnection {
         _handleSerial(payload);
         break;
       case 0x03:
-        _logEvent('✗ 控制系统中断，准备重连');
+        // 控制系统中断（处理器主动要求断开）。属传输层/远端事件，
+        // 按 python-cipclient 行为重连；记录原始字节便于联调。
+        _logEvent('✗ 控制系统中断(0x03) [${_hex(payload)}]，准备重连');
         notifyConnectionError();
         break;
-      default:
-        // 未知类型。安全模式下可能是认证挑战包，记录下来供抓包分析
-        debugPrint(
-          '[Cip] 未处理包类型 0x${type.toRadixString(16)}: ${_hex(payload)}',
-        );
-        // ⚠️ 仅 4 系列 + cipSecure 时进入；调用的认证桩为未验证实现，
-        // 切勿在生产环境依赖其正确性（详见 _handleAuthChallenge 顶部说明）
-        if (_config.cipSecure) _handleAuthChallenge(type, payload);
+        default:
+          // 未知包类型，仅记录原始字节供联调。4 系列注册/登录握手已由
+          // 0x0C / 0x0F / 0x02 分支覆盖，CP4 不会发送需要客户端应答的认证挑战，
+          // 故无需额外响应（官方 Crestron App 实测亦无 0x04 挑战交互）。
+          debugPrint(
+            '[Cip] 未处理包类型 0x${type.toRadixString(16)}: ${_hex(payload)}',
+          );
     }
   }
 
@@ -402,6 +458,76 @@ class CrestronCipConnection extends BaseConnection {
     if (_cipConnected == v) return;
     _cipConnected = v;
     notifyListeners();
+    if (v) {
+      // 握手完成：刷新存活时间戳并启动安全探活（替代被 CP4 拒绝的 0x0D 心跳 ping）。
+      // 探活靠「发送合法 update request 让 CP4 回包」驱动，故不再依赖 TCP 层静默感知。
+      markAlive();
+      _startProbe();
+    } else {
+      _stopProbe();
+    }
+  }
+
+  /// 启动安全探活：立即探活一次并周期性发送 update request。
+  void _startProbe() {
+    _stopProbe();
+    _probeTimer = Timer.periodic(
+      Duration(seconds: _kProbeIntervalSeconds),
+      (_) => _onProbeTick(),
+    );
+    // 立即探活一次，缩短握手完成后的首个检测空窗
+    Timer.run(_onProbeTick);
+  }
+
+  /// 停止安全探活
+  void _stopProbe() {
+    _probeTimer?.cancel();
+    _probeTimer = null;
+  }
+
+  /// 探活 tick：发送合法 update request；若距上次收到任何数据超过 deadline，
+  /// 判定链路已死（静默断链兜底）。
+  void _onProbeTick() {
+    if (!_cipConnected) {
+      _stopProbe();
+      return;
+    }
+    // 看门狗：静默断链场景（写成功入缓冲但 CP4 不再回包）的兜底判定。
+    // 用毫秒 + >= 判定边界，保证正好到达阈值即触发（不漏判、不拖到下一 tick），
+    // 且阈值=2 倍间隔，单次漏回不会误杀。
+    final DateTime? last = lastHeartbeatResponse;
+    if (last != null &&
+        DateTime.now().difference(last).inMilliseconds >=
+            _kProbeDeadlineSeconds * 1000) {
+      _logEvent(
+        '探活看门狗：超过 $_kProbeDeadlineSeconds 秒未收到任何数据，判定链路断开',
+      );
+      reportTransportLost();
+      return;
+    }
+    // 发送合法 update request 探活（CP4 会回 0x1C/0x1D 状态推送，刷新存活时间戳）。
+    // 发送失败会经 socket onError → 基类 reportTransportLost 秒级断连。
+    try {
+      _send(_buildUpdateRequest());
+    } catch (e) {
+      _logEvent('探活发送异常: $e');
+      reportTransportLost();
+    }
+  }
+
+  /// 协议层硬失败（如注册被拒 / IP-ID 不存在）。
+  /// 这类属于配置错误，自动重连没有意义（每次都会以同样原因失败），
+  /// 因此停止自动重连并展示明确错误，等待用户在配置页修正凭据/IP-ID后，
+  /// 由 main.dart 的 _onConfigChanged 调用 connect() 重置标志并重新连接。
+  /// 若直接 reconnect，会出现“连上→被拒→0x03 断开→再连”的死循环刷屏。
+  void _failConnection() {
+    _setCipConnected(false);
+    _logEvent(
+      '连接已停止（配置类错误）：请在“中控主机”区核对 IP-ID / 用户名 / 密码，'
+      '修正后本页会自动重连',
+    );
+    // manual=true 阻止基类自动重连；下次 connect() 会清零该标志。
+    disconnect(manual: true);
   }
 
   void _updateState(String sigtype, int join, dynamic value, String direction) {
@@ -458,20 +584,51 @@ class CrestronCipConnection extends BaseConnection {
     ]);
   }
 
+  /// 客户端注册（Client Sign-On）。⚠️ 帧类型必须是 0x0A，不是 0x01！
+  /// 逐字节核对 node-red-contrib-cip `sendIPID()`（可运行 CIP 客户端）与
+  /// scip2cip 转发的官方 Crestron 移动 App 注册帧（其 `data[0]==0x0A`、IP-ID 在 `data[4]`，
+  /// 且会把 `data[5:6]` 端口改写成 SCIP 端口）：
+  ///   常量：CLIENT_SIGNON=0x0a，SERVER_SIGNON=0x01（0x01 是服务器签名，非客户端）。
+  /// 旧实现误用 0x01 + 错误的 IP-ID 位置/后缀，3 系容忍故能连、4 系严格故 0x40 拒绝。
+  /// 结构：`0A 00 <len> 00 [ipid] [port_hi] [port_lo] 40 02 00 00 F1 01 <hostname>`
+  ///   —— 官方 App 抓包实测尾部为 `F1 01 <hostname>`（hostname 为本机名，官方连代理时用 "localhost"）。
+  ///   - ipid 在负载第 2 字节（整帧索引 4）；
+  ///   - port 字段 = 本连接目标端口（3 系 41794=0xA342；4 系 SCIP 41796=0xA344）。
   Uint8List _buildRegistration(int ipid) {
-    // 0x01 注册包：payload = 00 00 00 00 00 <ipid> 40 ff ff f1 01
+    if (_config.cipSecure) {
+      // 4 系列 SCIP（加密，41796）：现代 Client Sign-On 帧（0x0A）。
+      // 逐字节对齐 node-red-contrib-cip 可运行客户端 sendIPID() 与 scip2cip
+      // 截获的官方 Crestron 移动 App 注册帧（其 ForwardClientToSsl 取 ipid=data[4]）：
+      //   0a 00 0b 00 00 [ipid] [port_hi] [port_lo] 40 02 00 00 d1 01 00
+      // 注意 IP-ID 前必须有一个固定 0x00 占位字节（data[3]=0x00，data[4]=ipid），
+      // 旧实现漏掉该 0x00 导致 IP-ID 实际落在 data[3]，与官方包错位。
+      // port 字段 = 本连接目标端口（SCIP 41796=0xA344；明文 41794=0xA342）。
+      final int port = devicePort;
+      // 官方 Crestron App 抓包实测尾部固定为 `F1 01 localhost`（不是真实主机名！）。
+      // 用真实主机名会被 CP4 以 0x40 拒绝，必须逐字节对齐官方用固定 "localhost"。
+      const String hostName = 'localhost';
+      final List<int> hostBytes = hostName.codeUnits.toList();
+      final payload = [
+        0x00, // 固定占位字节（IP-ID 前的 0x00，官方包结构如此）
+        ipid & 0xFF,
+        (port >> 8) & 0xFF,
+        port & 0xFF,
+        0x40,
+        0x02,
+        0x00,
+        0x00,
+        0xF1,
+        0x01,
+        ...hostBytes,
+      ];
+      return _frame(0x0a, payload);
+    }
+    // 3 系列明文 CIP（41794）：旧版 Client Sign-On 帧（0x01）。
+    // 保持用户原可用配置——3 代处理器认 0x01 旧格式，勿回归为 0x0A。
     final payload = [
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00,
       ipid & 0xFF,
-      0x40,
-      0xff,
-      0xff,
-      0xf1,
-      0x01,
+      0x40, 0xff, 0xff, 0xf1, 0x01,
     ];
     return _frame(0x01, payload);
   }
@@ -544,9 +701,10 @@ class CrestronCipConnection extends BaseConnection {
 
   // ===================== 4 系列安全认证（SCIP 0x0B 登录） =====================
   // 标准 SCIP 登录已在握手阶段通过 [_buildLoginPacket]/[_sendLoginPacket] 实现：
-  //   TLS 连上后客户端发 0x0B 登录包(username:password)，CP4 回 0x0C 表示成功。
-  // 下方 [_handleAuthChallenge] 仅作为“未知包类型”的兜底记录，供个别固件变体联调；
-  // 它不会主动发送任何帧（[_sendAuthResponse] 仅打印），不影响 0x0B 主流程。
+  //   TLS 连上后客户端发 0x0B 登录包(username:password)，CP4 回 0x0C 表示成功，
+  //   随后按 0x0F → 0x0A(被 0x40 拒) → 0x0B → 0x0C 顺序完成握手（见各 case 分支）。
+  // Crestron 未公开 4 系列 SCIP 的 0x04 客户端认证算法，且官方 App 实测表明在
+  // 正确账号/IP-ID 下 CP4 不会发送 0x04 挑战，故本实现不再包含 0x04 探测逻辑。
 
   /// 解析 CIP 注册结果（0x02 帧 payload）并给出可读原因。
   /// 常见 reject reason codes（参考 Crestron CIP 逆向文档）：
@@ -562,12 +720,24 @@ class CrestronCipConnection extends BaseConnection {
     switch (reject) {
       case 0x40:
         if (_config.cipSecure) {
-          return '\n   原因：注册被拒（0x40，SCIP 加密模式）。最可能：CP4 启用了身份验证但 App 未通过挑战-应答，'
-              '注册包被拒。\n   建议：① 在 CP4 控制台进入 System Info → Networked Devices → CIP Identity Settings，'
-              '临时把 "Require Authentication" 关掉或勾选 "Allow Anonymous Access"，再重试；'
-              '② 或者在 App 配置页中控主机区填写 CIP 用户名/密码（需要 CP4 端先抓包确认 challenge 格式才能生效）；'
-              '③ 确认 App 端 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} '
-              '在 SIMPL 程序中已分配给 XPanel/Control System。';
+          // 4 系列无法关闭身份验证（Crestron 官方文档明确），所以必须提供正确账号/IP-ID。
+          // 已逐字节核对 scip2cip（4 代 SCIP 可运行参考实现）：其 0x0B 登录包与本项目完全一致，
+          // 且 0x0C 00 03 00 00 01 即"登录成功"。因此：
+          //   - 若曾收到 0x0C 登录成功 → 账号密码被接受，被拒指向 IP-ID；
+          //   - 若从未收到 0x0C       → 账号密码未被接受（4 代默认未必是 CRESTRON:CRESTRON）。
+          if (_loginConfirmed) {
+            return '\n   原因：注册被拒（0x40，SCIP 加密模式）。已收到 0x0C 登录成功，'
+                '说明账号密码 "${_config.cipUsername}" 被 CP4 接受；'
+                '被拒指向 IP-ID 0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()}：'
+                '\n   ① 未在 SIMPL 程序中把该 IP-ID 分配给 XPanel / Control System 符号；'
+                '\n   ② 在 CP4 控制台 System Info → Networked Devices → CIP Identity Settings 中，'
+                '该 IP-ID 未对当前账号授权（4 代需显式登记允许连接的 IP-ID）；'
+                '\n   ③ 该 IP-ID 已被其它在线客户端占用。';
+          }
+          return '\n   原因：注册被拒（0x40，SCIP 加密模式）。未收到 0x0C 登录成功，'
+              '说明 CP4 未接受账号密码。4 系列身份验证无法关闭，'
+              '请确认 App 端 CIP 用户名/密码是 CP4 控制系统的真实账号'
+              '（4 代默认未必是 CRESTRON:CRESTRON，以 CP4 实际配置为准）。';
         }
         return '\n   原因：注册被拒（0x40，明文 CIP）。可能：① SIMPL 程序里没有把 IP-ID '
             '0x${_config.cipIpId.toRadixString(16).padLeft(2, '0').toUpperCase()} '
@@ -582,56 +752,6 @@ class CrestronCipConnection extends BaseConnection {
         return '\n   原因：未知 reject code 0x${reject.toRadixString(16)}';
     }
   }
-
-  void _handleAuthChallenge(int type, Uint8List payload) {
-    final String log =
-        'AUTH type=0x${type.toRadixString(16)}: ${_hex(payload)}';
-    debugPrint('[Cip] $log');
-    _authLog.add(log);
-    if (_authLog.length > 50) _authLog.removeAt(0);
-    notifyListeners();
-    // TODO(验证): 真实固件下，需从 payload 解析出 challenge 字节与用户名，
-    // 下方以整包 payload 作为占位 challenge 触发认证回传，仅供联调。
-    if (_config.cipSecure && _config.cipUsername.isNotEmpty) {
-      _sendAuthResponse(
-        challenge: payload,
-        username: _config.cipUsername,
-        password: _config.cipPassword,
-      );
-    }
-  }
-
-  /// 计算认证响应哈希（需以真实抓包校准）
-  /// 社区常见做法：sha256(password + challenge) 的十六进制串。
-  /// 若实际固件为 sha256(challenge + ':' + username + ':' + password)
-  /// 或 HMAC，请在此处替换。
-  List<int> _computeAuthResponse({
-    required List<int> challenge,
-    required String username,
-    required String password,
-  }) {
-    final List<int> input = <int>[...password.codeUnits, ...challenge];
-    final crypto.Digest digest = crypto.sha256.convert(input);
-    return digest.bytes.toList();
-  }
-
-  /// 发送认证响应（帧格式需以真实抓包校准，此处为占位）
-  void _sendAuthResponse({
-    required List<int> challenge,
-    required String username,
-    required String password,
-  }) {
-    final List<int> response = _computeAuthResponse(
-      challenge: challenge,
-      username: username,
-      password: password,
-    );
-    debugPrint('[Cip] 发送认证响应 (username=$username, hash=${_hex(response)})');
-    // TODO(验证): 按固件要求的帧结构封装 username + response 并 _send(...)
-  }
-
-  /// 安全认证调试日志（UI 可展示）
-  List<String> get authLog => List.unmodifiable(_authLog);
 
   /// 最近事件日志（UI 可展示）
   List<String> get eventLog => List.unmodifiable(_eventLog);

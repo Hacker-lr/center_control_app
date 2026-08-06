@@ -69,13 +69,10 @@ class _PowerControlPageState extends State<PowerControlPage> {
               // Column：垂直布局，从上到下依次排列各区域
               child: Column(
                 children: [
-                  // 顶部间距
+                  // 顶部间距；其余内容（chip行+卡片+状态文字）整页放进
+                  // Expanded 内的 SCV，resize 动画的极矮中间帧下整页可滚动，
+                  // 不会因固定项总和溢出 Column 而闪现黄黑条。
                   SizedBox(height: ResponsiveUtils.getSpacing(context, 12)),
-                  // 连接状态指示器：显示已启用区块对应设备的连接状态
-                  _buildConnectionStatusIndicator(),
-                  // 控制卡片区：根据勾选情况渲染时序电源 / 大屏电源 两个区块
-                  // 卡片整体跟随可用宽度自适应缩放，并在剩余空间内垂直居中。
-                  // 矮窗下用 SingleChildScrollView 兜底，防止内容溢出。
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
@@ -117,21 +114,42 @@ class _PowerControlPageState extends State<PowerControlPage> {
                           12,
                         );
                         final double btnFromW = (contentW - btnGap) / 2;
-                        // 高度方向按容器实际可用高度均分；不够时由 SCV 滚动兜底
-                        final double perCardH =
-                            (constraints.maxHeight -
-                                blockGap * (cardCount - 1)) /
-                            cardCount;
+                        // 按钮最小尺寸（与下方 clamp 下限一致）：矮窗时按钮不再缩小，
+                        // 因此卡片内容存在最小高度。若卡片预算高度均分出的 perCardH
+                        // 小于该最小高度，卡片内容会超出显式 height 而溢出（黄黑条）。
+                        // 这里给 perCardH 设下限，保证卡片内部内容永不溢出。
+                        const double minBtnSize = 56.0;
+                        final double minContentH =
+                            2 * cardPad + titleBlock + minBtnSize + 6;
+                        // 整页 SCV 内固定项（chip行+状态文字+间距）高度估算。
+                        // chipRow 是 Container(padding 5×2 + Icon 14 + Text 11)，
+                        // statusText 是 Text fontSize ~14.4 × lineHeight ~1.3。
+                        // 矮视口下预算可能为负，钳制到 0，由 perCardH 下限保证内容装得下，
+                        // 整页 Column 交给 SCV 滚动，永不溢出。
+                        const double chipRowEstH = 26.0;
+                        const double statusEstH = 22.0;
+                        const double midGap = 12.0;
+                        const double bottomGap = 24.0;
+                        final double fixedEstH =
+                            chipRowEstH + statusEstH + midGap * 2 + bottomGap;
+                        final double cardsBudgetH =
+                            math.max(constraints.maxHeight - fixedEstH, 0.0);
+                        // 高度方向按卡片区预算高度均分；不低于最小内容高度。
+                        final double perCardH = math.max(
+                          (cardsBudgetH - blockGap * (cardCount - 1)) /
+                              cardCount,
+                          minContentH,
+                        );
                         // btnFromH 再减 6px 安全余量，防 Text 行高波动、图标字形
                         // ascent/descent 差异导致卡片底部溢出（实测大屏电源卡片
                         // 因 cast_connected 图标垂直对齐问题会多溢出 ~7px）
                         final double btnFromH =
                             perCardH - 2 * cardPad - titleBlock - 6;
                         // 按钮尺寸：取宽/高上限的较小值，桌面下封顶 180
-                        // （用户要求"开/关按钮像原来那样"），窄窗自动缩小
+                        // （用户要求"开/关按钮像原来那样"），窄窗自动缩小，下限 56
                         final double btnSize = math
                             .min(btnFromW, btnFromH)
-                            .clamp(56.0, 180.0);
+                            .clamp(minBtnSize, 180.0);
 
                         // 卡片组：固定宽度 cardMaxW，内部 Column 居中
                         // 每张卡片显式传 height=perCardH，避免依赖
@@ -161,20 +179,37 @@ class _PowerControlPageState extends State<PowerControlPage> {
                           ],
                         );
 
-                        // 每张卡片已有显式 height=perCardH，SCV 三件套简化：
-                        // 用 Center 垂直居中卡片组即可（卡片高度固定，
-                        // 不会出现 SCV 中 center 失效的问题）
-                        return Center(
-                          child: SizedBox(width: cardMaxW, child: cardsWidget),
+                        // 整页内容（chip行+卡片+状态文字）放进 SCV + Column：
+                        // 任何高度下 SCV 内 Column 永无界，固定项总和不再溢出
+                        // 闪现黄黑条（与矩阵页/大屏页"整体可滚动"机制一致）。
+                        // ConstrainedBox(minHeight=视口) 让内容不足时填满居中。
+                        return SingleChildScrollView(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildConnectionStatusIndicator(),
+                                const SizedBox(height: midGap),
+                                Center(
+                                  child: SizedBox(
+                                    width: cardMaxW,
+                                    child: cardsWidget,
+                                  ),
+                                ),
+                                const SizedBox(height: midGap),
+                                _buildStatusText(),
+                                const SizedBox(height: bottomGap),
+                              ],
+                            ),
+                          ),
                         );
                       },
                     ),
                   ),
-                  // 状态提示文字：根据按钮点击状态动态显示操作反馈
-                  _buildStatusText(),
-                  // 底部间距
-                  SizedBox(height: ResponsiveUtils.getSpacing(context, 24)),
-                ],
+                  ],
               ),
             ),
           ),
@@ -420,39 +455,25 @@ class _PowerControlPageState extends State<PowerControlPage> {
     }
 
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: ResponsiveUtils.getSpacing(context, 16),
-        vertical: ResponsiveUtils.getSpacing(context, 6),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
         color: statusColor.withAlpha(20),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(DeviceConfig.statusChipBorderRadius),
         border: Border.all(color: statusColor.withAlpha(60), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(statusIcon, color: statusColor, size: 16),
-          SizedBox(width: ResponsiveUtils.getSpacing(context, 6)),
+          Icon(statusIcon, color: statusColor, size: 14),
+          const SizedBox(width: 4),
           Text(
             statusText,
             style: TextStyle(
-              fontSize: ResponsiveUtils.getFontSize(context, 12),
+              fontSize: 11,
               color: statusColor,
               fontWeight: FontWeight.w500,
             ),
           ),
-          // 已连接状态下显示心跳计数（仅对真正建立连接的设备有意义）
-          if (status == ConnectionStatus.connected && label == '时序电源') ...[
-            SizedBox(width: ResponsiveUtils.getSpacing(context, 10)),
-            Text(
-              '心跳 #${_deviceConnection.heartbeatCount}',
-              style: TextStyle(
-                fontSize: ResponsiveUtils.getFontSize(context, 11),
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -482,13 +503,18 @@ class _PowerControlPageState extends State<PowerControlPage> {
 
     return GestureDetector(
       onTap: onPressed,
-      // AnimatedContainer：按钮状态变化时带平滑过渡动画
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+      // 尺寸用外层 SizedBox 固定（resize 时立即到位，不做动画）——
+      // 若把 width/height 放在 AnimatedContainer，窗口 resize 时按钮会播放
+      // 300ms 尺寸插值动画，中间帧按钮尺寸偏大而卡片高度已按新尺寸重算，
+      // 导致卡片内容瞬时溢出黄黑条（"全屏切窗口瞬间闪现"的根因）。
+      // AnimatedContainer 仅保留 decoration（颜色/阴影/边框）平滑过渡。
+      child: SizedBox(
         width: btnSize,
         height: btnSize,
-        // 圆形按钮装饰
-        decoration: BoxDecoration(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          // 圆形按钮装饰
+          decoration: BoxDecoration(
           shape: BoxShape.circle,
           // 激活时使用主题色，非激活时使用深色背景
           color: isActive
@@ -539,6 +565,7 @@ class _PowerControlPageState extends State<PowerControlPage> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

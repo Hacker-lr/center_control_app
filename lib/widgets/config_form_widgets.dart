@@ -638,6 +638,13 @@ Widget buildBrandDropdown({
   required List<String> brandNames,
   required ValueChanged<String> onChanged,
 }) {
+  // 防御：品牌列表可能不含当前存储值（如默认品牌未纳入某设备列表），
+  // 或存在重复项。这里去重并把 value 钳制到列表中的有效项，
+  // 避免 DropdownButton 断言（value 必须在选项中恰好出现一次）导致整页崩溃。
+  final List<String> uniqueBrands = brandNames.toSet().toList();
+  final String effectiveValue = uniqueBrands.contains(currentValue)
+      ? currentValue
+      : (uniqueBrands.isNotEmpty ? uniqueBrands.first : currentValue);
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),
     child: Row(
@@ -653,9 +660,9 @@ Widget buildBrandDropdown({
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: currentValue,
+              value: effectiveValue,
               isExpanded: true,
-              items: brandNames.map((brand) {
+              items: uniqueBrands.map((brand) {
                 return DropdownMenuItem<String>(
                   value: brand,
                   child: Padding(

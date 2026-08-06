@@ -835,10 +835,10 @@ class _BigScreenPageState extends State<BigScreenPage> {
     /// 更新本地矩阵状态：记录输入输出绑定关系
     _matrixState.bindOutput(outputChannel, selectedInput);
 
-    // Crestron VTP 模式：输出通道 Y → 数字 join = joinMatrixOutputBase + Y 脉冲
-    // 中控程序收到后，将"最后按下的输入"路由到该输出（路由逻辑在 SIMPL 中实现）
+    // Crestron VTP 模式：输出通道 Y（1 基）→ 数字 join = joinMatrixOutputBase + Y - 1 脉冲
+    // 即第 1 路输出对应「基址」本身，第 2 路对应「基址+1」
     if (_config.crestronMode) {
-      _cip.pulse(_config.joinMatrixOutputBase + outputChannel);
+      _cip.pulse(_config.joinMatrixOutputBase + outputChannel - 1);
       return;
     }
 
@@ -878,10 +878,10 @@ class _BigScreenPageState extends State<BigScreenPage> {
     /// 更新矩阵状态，选中该输入通道
     _matrixState.selectInput(channelNumber);
 
-    // Crestron VTP 模式：输入通道 X → 数字 join = joinMatrixInputBase + X 脉冲
-    // 中控程序据此记录"最后按下的输入"，与真实 Crestron 面板行为一致
+    // Crestron VTP 模式：输入通道 X（1 基）→ 数字 join = joinMatrixInputBase + X - 1 脉冲
+    // 即第 1 路输入对应「基址」本身，第 2 路对应「基址+1」，与"从基址开始"一致
     if (_config.crestronMode) {
-      _cip.pulse(_config.joinMatrixInputBase + channelNumber);
+      _cip.pulse(_config.joinMatrixInputBase + channelNumber - 1);
     }
   }
 

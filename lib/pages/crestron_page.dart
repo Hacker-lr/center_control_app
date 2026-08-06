@@ -182,16 +182,6 @@ class _CrestronPageState extends State<CrestronPage> {
               fontWeight: FontWeight.w500,
             ),
           ),
-          if (cipOk) ...[
-            SizedBox(width: ResponsiveUtils.getSpacing(context, 10)),
-            Text(
-              '心跳 #${_cip.heartbeatCount}',
-              style: TextStyle(
-                fontSize: ResponsiveUtils.getFontSize(context, 11),
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
         ],
       ),
     );

@@ -79,7 +79,15 @@ abstract class BaseConnection extends ChangeNotifier {
   /// 获取最后一次心跳响应的时间
   DateTime? get lastHeartbeatResponse => _lastHeartbeatResponse;
 
-  /// 心跳间隔（秒），子类可重写（CIP 使用 5 秒）
+  /// 供子类（不同 library）在应用层探活/收到确认包时刷新「最近存活」时间戳，
+  /// 驱动基类看门狗逻辑（避免直接访问私有字段）。
+  void markAlive() => _lastHeartbeatResponse = DateTime.now();
+
+  /// 供子类（不同 library）在应用层探活/看门狗判定链路死亡时调用，
+  /// 触发断连与自动重连（避免直接访问私有的 _handleDisconnection）。
+  void reportTransportLost() => _handleDisconnection();
+
+  /// 心跳间隔（秒），子类可重写（CIP 不发送心跳，此值对其不生效）
   int get heartbeatInterval => _config.heartbeatIntervalSeconds;
 
   /// 心跳超时倍数：连续多少个心跳周期无响应即判定离线。
@@ -116,8 +124,11 @@ abstract class BaseConnection extends ChangeNotifier {
       return;
     }
     _isManualDisconnect = false;
+    // 新生代：使任何在途的旧建连（disconnect/重连并发触发）失效，避免双 socket/双会话
+    _connGeneration++;
     await _establishConnection();
-    _startHeartbeat();
+    // 若建连因世代失效而中止（status 非 connected），不要启动保活定时器
+    if (_status == ConnectionStatus.connected) _startKeepalive();
   }
 
   /// ============================================================
@@ -126,6 +137,8 @@ abstract class BaseConnection extends ChangeNotifier {
   /// 手动断开时不会触发自动重连，自动断开（如网络异常）时会触发重连
   /// ============================================================
   void disconnect({bool manual = true}) {
+    // 新生代：使任何在途建连与待发写失效，避免断连后残留帧串到新连接
+    _connGeneration++;
     _isManualDisconnect = manual;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
@@ -314,11 +327,29 @@ abstract class BaseConnection extends ChangeNotifier {
   /// ============================================================
   Future<void> _establishConnection() async {
     _updateStatus(ConnectionStatus.connecting);
+    // 捕获本次建连世代；若在 awaitsocket 期间发生 disconnect/新 connect/重连，
+    // _connGeneration 会变化，本次建连应作废（销毁新 socket，不提交），
+    // 否则会出现「两个 socket 同时完成握手、向对端重复注册同一会话」的错乱。
+    final int myGen = _connGeneration;
 
     try {
       if (useTcp) {
         // TCP模式：创建TCP连接（CIP安全模式会重写 createTcpSocket 返回 SecureSocket）
-        _tcpSocket = await createTcpSocket();
+        final Socket socket = await createTcpSocket();
+        // 期间若发生 disconnect / 新 connect / 重连，放弃本次建连
+        if (myGen != _connGeneration) {
+          try {
+            socket.destroy();
+          } catch (_) {}
+          return;
+        }
+        // 防御性：销毁可能残留的旧 socket，避免泄漏（旧实现直接覆盖 _tcpSocket 会丢引用）
+        if (_tcpSocket != null && _tcpSocket != socket) {
+          try {
+            _tcpSocket!.destroy();
+          } catch (_) {}
+        }
+        _tcpSocket = socket;
         _tcpSocket!.setOption(SocketOption.tcpNoDelay, true);
         _tcpSocket!.listen(
           _onDataReceived,
@@ -330,12 +361,17 @@ abstract class BaseConnection extends ChangeNotifier {
       } else {
         // UDP模式：创建UDP套接字并绑定到本地端口
         _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+        if (myGen != _connGeneration) {
+          try {
+            _udpSocket?.close();
+          } catch (_) {}
+          _udpSocket = null;
+          return;
+        }
         _udpSocket!.listen(_onUdpDataReceived);
         debugPrint('[$runtimeType] UDP连接成功 -> $deviceIp:$devicePort');
       }
 
-      // 连接代数 +1：写队列中残留的旧连接帧将被自动丢弃
-      _connGeneration++;
       _updateStatus(ConnectionStatus.connected);
       _lastHeartbeatResponse = DateTime.now();
       _reconnectTimer?.cancel();
@@ -412,6 +448,8 @@ abstract class BaseConnection extends ChangeNotifier {
   /// 处理连接断开的内部方法
   /// ============================================================
   void _handleDisconnection() {
+    // 新生代：使在途建连与待发写失效，避免断连后残留帧串到新连接
+    _connGeneration++;
     // 异常断线时同样取消心跳/看门狗定时器，避免重连等待期空转调度
     _heartbeatTimer?.cancel();
     _watchdogTimer?.cancel();
@@ -433,18 +471,35 @@ abstract class BaseConnection extends ChangeNotifier {
   /// ============================================================
   /// 启动心跳检测机制
   /// ============================================================
-  void _startHeartbeat() {
-    _heartbeatTimer?.cancel();
+  /// 启动连接保活：心跳 ping 是否发送由 [autoStartHeartbeatPings] 决定；
+  /// 存活看门狗是否启用由 [enableLivenessWatchdog] 决定。
+  /// CIP 等事件驱动协议应禁用看门狗（空闲无数据是正常行为，TCP 层断连已能感知），
+  /// 否则会被「无数据超时」误杀，造成「连上→空闲→断连→重连」循环。
+  void _startKeepalive() {
+    if (enableLivenessWatchdog) _startWatchdog();
+    if (autoStartHeartbeatPings) startHeartbeatPings();
+  }
+
+  /// 是否启用存活看门狗（无数据超时判定离线）。默认 true；
+  /// CIP 等事件驱动协议重写为 false——这类协议空闲时对端本就不主动发数据，
+  /// 用「无数据超时」会误杀正常空闲连接，应仅依赖 TCP 层断连(onDone/onError)感知。
+  bool get enableLivenessWatchdog => true;
+
+  /// 是否在建连后立即发送心跳 ping。默认 true（大多数设备握手简单，连上即可保活）；
+  /// CIP 重写为 false（CP4 不兼容 0x0D 心跳 ping，收到即断开，故 CIP 不发心跳）。
+  bool get autoStartHeartbeatPings => true;
+
+  /// 启动心跳 ping 定时器（含立即探活一次）。看门狗需由调用方先启动。
+  void startHeartbeatPings() {
     if (heartbeatCommand.isEmpty) {
       debugPrint('[$runtimeType] 心跳命令为空，跳过心跳检测');
       return;
     }
+    if (_heartbeatTimer != null) return; // 防重复启动
     _heartbeatTimer = Timer.periodic(
       Duration(seconds: heartbeatInterval),
       (_) => _sendHeartbeat(),
     );
-    // 启动轻量级存活看门狗：高频(仅时间戳比对)判定离线，缩短反馈延迟
-    _startWatchdog();
     // 连接建立后立即探活一次，缩短首次离线检测的等待窗口
     _sendHeartbeat();
     debugPrint('[$runtimeType] 心跳检测已启动');
@@ -529,9 +584,11 @@ abstract class BaseConnection extends ChangeNotifier {
           _reconnectTimer = null;
           return;
         }
+        // 新生代：使本次重连之前的在途建连失效
+        _connGeneration++;
         await _establishConnection();
         if (_status == ConnectionStatus.connected) {
-          _startHeartbeat();
+          _startKeepalive();
           _reconnectTimer?.cancel();
           _reconnectTimer = null;
         }

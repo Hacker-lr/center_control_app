@@ -6,8 +6,8 @@ import '../services/device_config.dart';
 /// 通用通道按钮组件
 /// 用于视频矩阵页和大屏控制页的输入/输出通道按钮
 /// 支持自定义长按触发改名对话框（时长由 DeviceConfig 控制）
-/// 文字使用统一字号（由按钮高度决定，不随内容长度缩放），过长自动换行/省略，
-/// 确保所有通道名称字号一致
+/// 通道名最多 2 行：输入已被 channelNameMaxLength(15) 限制在物理容量内，
+/// 渲染端在 [4px, baseFont] 内二分字号，保证两行内完整显示（不裁切）。
 /// 所有颜色与交互参数取自 DeviceConfig 全局配置
 /// ============================================================
 class ChannelButton extends StatefulWidget {
@@ -225,9 +225,7 @@ class _ChannelButtonState extends State<ChannelButton> {
                   ),
                 ),
               ),
-            // 按钮标签：最多 2 行，超长名称自动缩小字号完整显示，不再截断。
-            // 用 TextPainter 二分查找「能在 2 行 + 按钮可用高度内完整显示」的
-            // 最大字号（名字越长字越小，最短 8px 兜底，短名字保持原基准字号）。
+            // 按钮标签：见 _AdaptiveChannelLabel 文档（最多两行 + 完整显示）。
             // 矩阵页与大屏页通道按钮共用此组件，一处修改同时生效。
             _AdaptiveChannelLabel(
               label: widget.label,
@@ -249,12 +247,17 @@ class _ChannelButtonState extends State<ChannelButton> {
 
 /// ============================================================
 /// 通道按钮自适应标签
-/// 最多显示 2 行；用二分查找「2 行内能完整显示」的最大字号：
-///   - 名字短 → 保持 baseFont（1 行）
-///   - 名字长 / 按钮窄（全屏 8 列等）→ 字号自动压小，保证 2 行内全部可见
-/// 不设 minFont 下限（下限 1.0），确保任意长度命名都能在 2 行内完整显示，
-/// 不再出现"FittedBox 因 2 行总高≤maxHeight 误判装得下而不缩放、内容被裁"的问题。
-/// 测量约束（maxLines:2 + maxWidth/maxHeight）与渲染约束（Text）保持一致。
+/// 目标："最多两行" + "完整显示" 同时成立，且上下两行字号一致
+/// （单 Text + 单一 style 渲染，天然保证所有行同字号）。
+/// 前提：改名输入已被 channelNameMaxLength(15) 限制在物理容量内
+/// （全屏最窄 45px 按钮，实测 15 中文字 2 行完整显示最大字号 4.73px）。
+/// 渲染逻辑：
+///   - baseFont 下能 ≤2 行 → 直接用 baseFont，不缩放（短名/中名）
+///   - baseFont 装不下 → 在 [4px, baseFont] 内二分找能 2 行的最大字号，
+///     结果 ×0.95 保险系数吸收测量/渲染亚像素差异，保证完整显示
+///   - 连 4px 都装不下（超限旧数据，输入已限制不应出现）→ 保持 2 行裁切兜底
+/// 测量样式从 DefaultTextStyle.of(context) 继承主题字体（全局 SimHei），
+/// 与渲染 Text 完全一致。
 /// ============================================================
 class _AdaptiveChannelLabel extends StatelessWidget {
   final String label;
@@ -271,53 +274,63 @@ class _AdaptiveChannelLabel extends StatelessWidget {
     required this.isHighlighted,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    // 二分查找「2 行内装下且总高 ≤ maxHeight」的最大字号。
-    // 关键：TextPainter 与 Text 都设 maxLines:2，且接受条件必须
-    //   !tp.didExceedMaxLines（2 行真装得下）&& tp.height ≤ maxHeight
-    // 不设 minFont 硬下限（下限 1.0），窄按钮/超长命名也能 2 行完整显示。
-    const double minFont = 1.0;
-    final TextStyle baseStyle = TextStyle(
-      fontSize: baseFont,
-      fontWeight: FontWeight.w600,
-      height: 1.1,
-    );
+  /// 最小字号（对应 channelNameMaxLength=15 的两行容量下限：实测 15 字在
+  /// 45px 按钮最大字号 4.73px，取 4.0 留余量；正常渲染约 4.5px）。
+  /// 二分下限，同时是"两行+全"的字号下界。
+  static const double _minFont = 4.0;
 
-    double fitFont = minFont;
-    double lo = minFont;
-    double hi = baseFont;
-    // 先判断 baseFont 本身就能 2 行装下，避免不必要的二分
-    final TextPainter tpBase = TextPainter(
-      text: TextSpan(text: label, style: baseStyle),
-      textDirection: TextDirection.ltr,
+  /// 保险系数：二分结果 ×0.95，吸收测量/渲染的亚像素/字体回退差异，杜绝裁切。
+  static const double _safeRatio = 0.95;
+
+  TextStyle _style(TextStyle inherited, double font) => TextStyle(
+    fontSize: font,
+    fontWeight: FontWeight.w600,
+    color: isHighlighted ? Colors.white : Colors.grey[400],
+    height: 1.1,
+    fontFamily: inherited.fontFamily,
+    fontFamilyFallback: inherited.fontFamilyFallback,
+  );
+
+  /// 在给定字号下，文字能否在 maxWidth 内最多 2 行完整显示，
+  /// 且 2 行总高不超过 maxHeight。仅做测量，不依赖缩放。
+  bool _fits(TextStyle inherited, double font) {
+    final TextPainter painter = TextPainter(
+      text: TextSpan(text: label, style: _style(inherited, font)),
       textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
       maxLines: 2,
     )..layout(maxWidth: maxWidth);
-    if (!tpBase.didExceedMaxLines && tpBase.height <= maxHeight + 0.5) {
-      fitFont = baseFont;
-    } else {
-      for (int i = 0; i < 30; i++) {
-        final double mid = (lo + hi) / 2;
-        final TextPainter tp = TextPainter(
-          text: TextSpan(
-            text: label,
-            style: baseStyle.copyWith(fontSize: mid),
-          ),
-          textDirection: TextDirection.ltr,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-        )..layout(maxWidth: maxWidth);
-        // 必须 2 行真装得下 且 总高不超可用区，才接受该字号
-        if (!tp.didExceedMaxLines && tp.height <= maxHeight + 0.5) {
-          fitFont = mid;
-          lo = mid;
-        } else {
-          hi = mid;
-        }
+    return !painter.didExceedMaxLines && painter.height <= maxHeight;
+  }
+
+  /// 二分查找「能在 2 行 + 可用高度内完整显示」的最大字号：
+  /// 短名保持 baseFont（不放大），长名逐档缩小，下限 _minFont。
+  double _fitFont(TextStyle inherited) {
+    if (_fits(inherited, baseFont)) return baseFont;
+    double lo = _minFont;
+    double hi = baseFont;
+    for (int i = 0; i < 24; i++) {
+      final double mid = (lo + hi) / 2;
+      if (_fits(inherited, mid)) {
+        lo = mid;
+      } else {
+        hi = mid;
       }
     }
+    return lo;
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    // 继承主题默认样式（含全局 SimHei 字体），保证测量与渲染字体一致
+    final TextStyle inherited = DefaultTextStyle.of(context).style;
+    final double font = _fitFont(inherited);
+    // 短名保持 baseFont；长名乘保险系数防亚像素溢出（字号仍 ≥ 4×0.95）
+    final double renderFont = (font >= baseFont) ? baseFont : font * _safeRatio;
+    final TextStyle style = _style(inherited, renderFont);
+
+    // 始终 2 行：输入已受 channelNameMaxLength 限制在物理容量内，
+    // 二分字号保证完整显示；仅超限旧数据触发 clip 裁切兜底。
     return SizedBox(
       width: maxWidth,
       height: maxHeight,
@@ -326,15 +339,9 @@ class _AdaptiveChannelLabel extends StatelessWidget {
           label,
           textAlign: TextAlign.center,
           softWrap: true,
-          // 最多 2 行；fitFont 已保证 2 行内完整显示，overflow 仅为极端兜底
           maxLines: 2,
-          overflow: TextOverflow.visible,
-          style: TextStyle(
-            fontSize: fitFont,
-            fontWeight: FontWeight.w600,
-            color: isHighlighted ? Colors.white : Colors.grey[400],
-            height: 1.1,
-          ),
+          overflow: TextOverflow.clip,
+          style: style,
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/camera_connection.dart';
@@ -40,6 +41,19 @@ class _CameraControlPageState extends State<CameraControlPage>
   /// 可选值：'tele'（放大）、'wide'（缩小）
   String? _activeZoom;
 
+  /// 云台方向按住时的自动重发定时器。
+  /// 原因：中控程序 / VISCA 网关 / 摄像头固件常对单次 PTZ 指令有"最大持续时长"
+  /// 限制（约 1 秒后即便 join 仍保持高也会停止驱动），仅按下时发一次 press/move
+  /// 会导致"按住约 1 秒后摄像机停下"。按住期间周期性重发同一条指令（幂等）可保证连续运动。
+  Timer? _dirHoldTimer;
+
+  /// 变焦按住时的自动重发定时器（同上原因）
+  Timer? _zoomHoldTimer;
+
+  /// 按住期间自动重发间隔：取 400ms，明显小于常见的 1 秒上限，
+  /// 既能保证连续驱动，又不会过于频繁。
+  static const Duration _holdRepeatInterval = Duration(milliseconds: 400);
+
   /// 保存待命状态：点击「保存」按钮后为 true（按钮呼吸闪烁），
   /// 此时点击数字按键 = 保存该预置位并退出待命；
   /// 未待命时点击数字按键 = 直接调用该预置位
@@ -63,6 +77,8 @@ class _CameraControlPageState extends State<CameraControlPage>
 
   @override
   void dispose() {
+    _dirHoldTimer?.cancel();
+    _zoomHoldTimer?.cancel();
     _saveBlinkController.dispose();
     super.dispose();
   }
@@ -369,7 +385,9 @@ class _CameraControlPageState extends State<CameraControlPage>
   void _onCameraSelected(int cameraNumber) {
     setState(() => _selectedCamera = cameraNumber);
     if (_config.crestronMode) {
-      _cip.pulse(_config.joinCamSelectBase + cameraNumber);
+      // 摄像机 X（1 基）→ 数字 join = joinCamSelectBase + X - 1 脉冲
+      // 即第 1 台摄像机对应「基址」本身，第 2 台对应「基址+1」，与"从基址开始"一致
+      _cip.pulse(_config.joinCamSelectBase + cameraNumber - 1);
       return;
     }
     _cameraManager.connectCamera(cameraNumber);
@@ -933,6 +951,7 @@ class _CameraControlPageState extends State<CameraControlPage>
     // Crestron VTP 模式：按住 = press 数字 join
     if (_config.crestronMode) {
       _cip.press(_camDirJoin(direction));
+      _startDirHold(() => _cip.press(_camDirJoin(direction)));
       setState(() => _activeDirection = direction);
       return;
     }
@@ -955,10 +974,15 @@ class _CameraControlPageState extends State<CameraControlPage>
         break;
     }
     conn.panTiltMove(_currentSpeed, _currentSpeed, panDir, tiltDir);
+    _startDirHold(
+      () => conn.panTiltMove(_currentSpeed, _currentSpeed, panDir, tiltDir),
+    );
     setState(() => _activeDirection = direction);
   }
 
   void _onDirectionUp() {
+    _dirHoldTimer?.cancel();
+    _dirHoldTimer = null;
     // Crestron VTP 模式：松开 = release 对应的数字 join
     if (_config.crestronMode) {
       final String? dir = _activeDirection;
@@ -975,7 +999,10 @@ class _CameraControlPageState extends State<CameraControlPage>
   void _onZoomDown(String action) {
     // Crestron VTP 模式：按住 = press 对应变焦数字 join
     if (_config.crestronMode) {
-      _cip.press(action == 'tele' ? _config.joinCamTele : _config.joinCamWide);
+      final int join =
+          action == 'tele' ? _config.joinCamTele : _config.joinCamWide;
+      _cip.press(join);
+      _startZoomHold(() => _cip.press(join));
       setState(() => _activeZoom = action);
       return;
     }
@@ -983,13 +1010,17 @@ class _CameraControlPageState extends State<CameraControlPage>
     if (conn == null) return;
     if (action == 'tele') {
       conn.zoomTele();
+      _startZoomHold(() => conn.zoomTele());
     } else {
       conn.zoomWide();
+      _startZoomHold(() => conn.zoomWide());
     }
     setState(() => _activeZoom = action);
   }
 
   void _onZoomUp() {
+    _zoomHoldTimer?.cancel();
+    _zoomHoldTimer = null;
     // Crestron VTP 模式：松开 = release 对应变焦数字 join
     if (_config.crestronMode) {
       if (_activeZoom == 'tele') {
@@ -1004,6 +1035,18 @@ class _CameraControlPageState extends State<CameraControlPage>
     if (conn == null) return;
     conn.zoomStop();
     setState(() => _activeZoom = null);
+  }
+
+  /// 启动"按住自动重发"定时器：每 [_holdRepeatInterval] 重新下发同一条 PTZ/变焦指令，
+  /// 以对抗中控/摄像头对单次指令的最大持续时长限制（约 1 秒后停）。指令本身幂等，重复下发安全。
+  void _startDirHold(void Function() reassert) {
+    _dirHoldTimer?.cancel();
+    _dirHoldTimer = Timer.periodic(_holdRepeatInterval, (_) => reassert());
+  }
+
+  void _startZoomHold(void Function() reassert) {
+    _zoomHoldTimer?.cancel();
+    _zoomHoldTimer = Timer.periodic(_holdRepeatInterval, (_) => reassert());
   }
 
   /// 速度切换：
@@ -1025,10 +1068,10 @@ class _CameraControlPageState extends State<CameraControlPage>
     final bool isSave = _savePending;
 
     // 执行发送（Crestron VTP 模式发 join 脉冲，否则走 VISCA 直连）
-    // Crestron 模式下调用/保存发同一个预置位 join（基址+N）；
-    // 保存语义由中控根据"保存按钮"join 的待命状态自行区分
+    // Crestron 模式下调用/保存发同一个预置位 join（基址 + N - 1，N 为 1 基预置位号）；
+    // 即第 1 个预置位对应「基址」本身，保存语义由中控根据"保存按钮"join 的待命状态自行区分
     if (_config.crestronMode) {
-      _cip.pulse(_config.joinCamPresetRecallBase + presetNum);
+      _cip.pulse(_config.joinCamPresetRecallBase + presetNum - 1);
     } else {
       final conn = _cameraManager.activeConnection;
       if (conn == null) return;

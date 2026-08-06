@@ -18,7 +18,7 @@ class SystemConfigPage extends StatefulWidget {
 }
 
 class _SystemConfigPageState extends State<SystemConfigPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final DeviceConfig _config = DeviceConfig();
 
   // ---- 受控设备配置 ----
@@ -48,8 +48,6 @@ class _SystemConfigPageState extends State<SystemConfigPage>
   final TextEditingController _cipIpIdController = TextEditingController();
   final TextEditingController _cipUsernameController = TextEditingController();
   final TextEditingController _cipPasswordController = TextEditingController();
-  final TextEditingController _cipPulseHoldMsController =
-      TextEditingController();
 
   // ---- 中控 Join 映射 ----
   final TextEditingController _joinPowerOnController = TextEditingController();
@@ -90,6 +88,8 @@ class _SystemConfigPageState extends State<SystemConfigPage>
       TextEditingController();
   final TextEditingController _joinLedPowerOffController =
       TextEditingController();
+  final TextEditingController _joinPageSelectBaseController =
+      TextEditingController();
 
   /// 摄像头设备（直连 VISCA）控制器列表
   final List<Map<String, TextEditingController>> _cameraControllers = [];
@@ -123,6 +123,12 @@ class _SystemConfigPageState extends State<SystemConfigPage>
           curve: const Interval(0.0, 0.5, curve: Curves.easeInOut),
         ),
       );
+  // 凭据区（认证用户名/密码）展开收起专用控制器：用 SizeTransition 裁剪，
+  // 避免 AnimatedSize 逐帧重测整棵 VTP 子树导致的整页抖动。
+  late final AnimationController _credsAnimCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 340),
+  );
   bool _powerUseTcp = true;
   bool _matrixUseTcp = true;
   bool _bigScreenUseTcp = true;
@@ -171,11 +177,13 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     _loadConfig();
     // 与当前模式对齐，避免首次进入时播放入场动画
     _vtpAnimCtrl.value = _crestronMode ? 1.0 : 0.0;
+    _credsAnimCtrl.value = _cipSecure ? 1.0 : 0.0;
   }
 
   @override
   void dispose() {
     _vtpAnimCtrl.dispose();
+    _credsAnimCtrl.dispose();
     for (final c in [
       _powerIpController,
       _powerPortController,
@@ -193,7 +201,6 @@ class _SystemConfigPageState extends State<SystemConfigPage>
       _cipIpIdController,
       _cipUsernameController,
       _cipPasswordController,
-      _cipPulseHoldMsController,
       _joinPowerOnController,
       _joinPowerOffController,
       _joinLayoutFullController,
@@ -217,6 +224,7 @@ class _SystemConfigPageState extends State<SystemConfigPage>
       _joinCamPresetRecallBaseController,
       _joinLedPowerOnController,
       _joinLedPowerOffController,
+      _joinPageSelectBaseController,
     ]) {
       c.dispose();
     }
@@ -276,7 +284,6 @@ class _SystemConfigPageState extends State<SystemConfigPage>
         .toUpperCase();
     _cipUsernameController.text = _config.cipUsername;
     _cipPasswordController.text = _config.cipPassword;
-    _cipPulseHoldMsController.text = '${_config.cipPulseHoldMs}';
     _cipSecure = _config.cipSecure;
     _showCrestronControl = _config.showCrestronControl;
 
@@ -304,6 +311,7 @@ class _SystemConfigPageState extends State<SystemConfigPage>
         '${_config.joinCamPresetRecallBase}';
     _joinLedPowerOnController.text = '${_config.joinLedPowerOn}';
     _joinLedPowerOffController.text = '${_config.joinLedPowerOff}';
+    _joinPageSelectBaseController.text = '${_config.joinPageSelectBase}';
 
     _cameraControllers.clear();
     _cameraUseTcp.clear();
@@ -374,17 +382,10 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     _config.setCipPort(
       int.tryParse(_cipPortController.text.trim()) ?? ConfigDefaults.cipPort,
     );
-    _config.setCipIpId(
-      int.tryParse(_cipIpIdController.text.trim(), radix: 16) ??
-          ConfigDefaults.cipIpId,
-    );
+    _config.setCipIpId(_parseCipIpId(_cipIpIdController.text));
     _config.setCipSecure(_cipSecure);
     _config.setCipUsername(_cipUsernameController.text.trim());
     _config.setCipPassword(_cipPasswordController.text);
-    _config.setCipPulseHoldMs(
-      int.tryParse(_cipPulseHoldMsController.text.trim()) ??
-          ConfigDefaults.cipPulseHoldMs,
-    );
     _config.setShowCrestronControl(_showCrestronControl);
 
     _config.setJoinPowerOn(
@@ -454,6 +455,9 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     _config.setJoinLedPowerOff(
       int.tryParse(_joinLedPowerOffController.text.trim()) ?? 24,
     );
+    _config.setJoinPageSelectBase(
+      int.tryParse(_joinPageSelectBaseController.text.trim()) ?? 0,
+    );
 
     final List<int> outCh = _bsOutputChannelControllers
         .map((c) => int.tryParse(c.text.trim()) ?? 0)
@@ -493,6 +497,25 @@ class _SystemConfigPageState extends State<SystemConfigPage>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
+  }
+
+  /// 解析 CIP IP-ID 输入：兼容多种写法
+  /// - 带 0x/0X 前缀的十六进制（如 "0x10"）
+  /// - 纯十六进制（如 "10" → 0x10 = 十进制 16）
+  /// - 纯十进制（如 "16" → 0x10）
+  /// 解析失败时回退到默认值，避免静默存成 0 导致注册被 0x40 拒绝。
+  int _parseCipIpId(String text) {
+    String t = text.trim();
+    if (t.isEmpty) return ConfigDefaults.cipIpId;
+    // 去掉 0x / 0X 前缀
+    t = t.replaceAllMapped(RegExp(r'^0[xX]', caseSensitive: false), (m) => '');
+    if (t.isEmpty) return ConfigDefaults.cipIpId;
+    // 先按十六进制解析
+    int? v = int.tryParse(t, radix: 16);
+    // 若含非十六进制字符（如纯十进制），再按十进制解析
+    v ??= int.tryParse(t);
+    if (v == null) return ConfigDefaults.cipIpId;
+    return v.clamp(0, 0xFF);
   }
 
   void _addCamera() {
@@ -686,10 +709,14 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                 // 关闭时让空间晚一点收起：菜单先随控制器淡出，过半后再切换为 SizedBox
                 final bool showColumn =
                     _crestronMode || _vtpAnimCtrl.value > 0.5;
-                return AnimatedSize(
-                  duration: const Duration(milliseconds: 380),
-                  reverseDuration: const Duration(milliseconds: 380),
-                  curve: Curves.easeInOut,
+                // 用 SizeTransition 替代 AnimatedSize：尺寸仅做裁剪/缩放，
+                // 不会逐帧对整棵 VTP 子树做 intrinsic 测量，避免切换子项时整页抖动。
+                return SizeTransition(
+                  sizeFactor: CurvedAnimation(
+                    parent: _vtpAnimCtrl,
+                    curve: Curves.easeInOut,
+                  ),
+                  alignment: Alignment.topCenter,
                   child: FadeTransition(
                     opacity: _vtpFade,
                     child: showColumn
@@ -715,28 +742,49 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                                     controller: _cipIpIdController,
                                     maxLength: 2,
                                   ),
-                                  buildInputRow(
-                                    label: '脉冲保持时长(ms)',
-                                    controller: _cipPulseHoldMsController,
-                                    isNumber: true,
-                                    maxLength: 4,
-                                    hintText: 'VTP 点按钮的保持时长，过小中控收不到',
-                                  ),
                                   buildPageVisibilitySwitch(
                                     title: '安全 CIP (SCIP / 4系列)',
                                     value: _cipSecure,
-                                    onChanged: (v) =>
-                                        setState(() => _cipSecure = v),
+                                    onChanged: (v) {
+                                      // 安全 CIP = SCIP 加密端口 41796（需认证）；
+                                      // 打开时端口自动置 41796 并展开认证用户名/密码框，
+                                      // 关闭时端口回 41794（明文 CIP）并收起。
+                                      setState(() => _cipSecure = v);
+                                      if (v) {
+                                        _credsAnimCtrl.forward();
+                                      } else {
+                                        _credsAnimCtrl.reverse();
+                                      }
+                                      final int p = v ? 41796 : 41794;
+                                      _cipPortController.text = '$p';
+                                      _config.setCipPort(p);
+                                      _config.setCipSecure(v);
+                                    },
                                   ),
-                                  buildInputRow(
-                                    label: '认证用户名',
-                                    controller: _cipUsernameController,
-                                    maxLength: 50,
-                                  ),
-                                  buildInputRow(
-                                    label: '认证密码',
-                                    controller: _cipPasswordController,
-                                    maxLength: 50,
+                                  // 凭据区用独立 SizeTransition 平滑展开/收起
+                                  // （axisAlignment: -1.0 表示自顶向下生长，内容不浮跳）
+                                  SizeTransition(
+                                    sizeFactor: CurvedAnimation(
+                                      parent: _credsAnimCtrl,
+                                      curve: Curves.easeInOutCubic,
+                                    ),
+                                    alignment: Alignment.topCenter,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        buildInputRow(
+                                          label: '认证用户名',
+                                          controller: _cipUsernameController,
+                                          maxLength: 50,
+                                        ),
+                                        buildInputRow(
+                                          label: '认证密码',
+                                          controller: _cipPasswordController,
+                                          maxLength: 50,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   buildPageVisibilitySwitch(
                                     title: '显示 Crestron 页面',
@@ -753,6 +801,14 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                                 isExpanded: _isExpanded('vtpJoin'),
                                 onToggle: () => _toggleGroup('vtpJoin'),
                                 children: [
+                                  buildSectionLabel('页面选择导航'),
+                                  buildInputRow(
+                                    label: '页面选择基址',
+                                    controller: _joinPageSelectBaseController,
+                                    isNumber: true,
+                                    maxLength: 4,
+                                    hintText: '默认0；可见页 i → 基址+i，隐藏页不占号',
+                                  ),
                                   buildSectionLabel('电源'),
                                   buildDualInputRow(
                                     labelA: '电源开',
@@ -788,15 +844,15 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                                   ),
                                   buildSectionLabel('矩阵'),
                                   buildDualInputRow(
-                                    labelA: '矩阵输入基址 (+X)',
+                                    labelA: '矩阵输入基址',
                                     controllerA: _joinMatrixInputBaseController,
-                                    labelB: '矩阵输出基址 (+Y)',
+                                    labelB: '矩阵输出基址',
                                     controllerB:
                                         _joinMatrixOutputBaseController,
                                   ),
                                   buildSectionLabel('摄像机'),
                                   buildInputRow(
-                                    label: '摄像机选择基址 (+X)',
+                                    label: '摄像机选择基址',
                                     controller: _joinCamSelectBaseController,
                                     isNumber: true,
                                     maxLength: 4,
@@ -828,7 +884,7 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                                   buildDualInputRow(
                                     labelA: '变焦缩小',
                                     controllerA: _joinCamWideController,
-                                    labelB: '预置位基址 (+N)',
+                                    labelB: '预置位基址',
                                     controllerB:
                                         _joinCamPresetRecallBaseController,
                                   ),

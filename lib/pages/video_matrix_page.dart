@@ -193,7 +193,6 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
   ///
   /// 根据矩阵设备的连接状态显示不同的图标、文字和颜色，
   /// 包括：已连接、连接中、连接失败、未连接四种状态。
-  /// 当设备连接成功时，还会显示心跳计数。
   Widget _buildConnectionStatusIndicator() {
     // Crestron 模式下统一使用全局 Crestron 状态芯片
     if (_config.crestronMode) {
@@ -258,14 +257,6 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
               fontWeight: FontWeight.w500,
             ),
           ),
-          // 连接成功时显示心跳计数
-          if (status == ConnectionStatus.connected) ...[
-            const SizedBox(width: 8),
-            Text(
-              '心跳 #${_matrixConnection.heartbeatCount}',
-              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-            ),
-          ],
         ],
       ),
     );
@@ -370,10 +361,11 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
     // 更新选中的输入通道，触发 UI 刷新以高亮显示选中状态
     _matrixState.selectInput(channelNumber);
 
-    // Crestron VTP 模式：输入通道 X → 数字 join = joinMatrixInputBase + X 脉冲
+    // Crestron VTP 模式：输入通道 X（1 基）→ 数字 join = joinMatrixInputBase + X - 1 脉冲
+    // 即第 1 路输入对应「基址」本身，第 2 路对应「基址+1」，与"从基址开始"一致
     // 中控程序据此记录"最后按下的输入"，与真实 Crestron 面板行为一致
     if (_config.crestronMode) {
-      _cip.pulse(_config.joinMatrixInputBase + channelNumber);
+      _cip.pulse(_config.joinMatrixInputBase + channelNumber - 1);
     }
   }
 
@@ -412,10 +404,11 @@ class _VideoMatrixPageState extends State<VideoMatrixPage> {
     // 更新矩阵状态：将该输出通道绑定到当前选中的输入通道
     _matrixState.bindOutput(channelNumber, selectedInput);
 
-    // Crestron VTP 模式：输出通道 Y → 数字 join = joinMatrixOutputBase + Y 脉冲
+    // Crestron VTP 模式：输出通道 Y（1 基）→ 数字 join = joinMatrixOutputBase + Y - 1 脉冲
+    // 即第 1 路输出对应「基址」本身，第 2 路对应「基址+1」
     // 中控程序收到后，将"最后按下的输入"路由到该输出（路由逻辑在 SIMPL 中实现）
     if (_config.crestronMode) {
-      _cip.pulse(_config.joinMatrixOutputBase + channelNumber);
+      _cip.pulse(_config.joinMatrixOutputBase + channelNumber - 1);
       return;
     }
 

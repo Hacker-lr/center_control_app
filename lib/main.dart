@@ -132,6 +132,9 @@ class _MainPageState extends State<MainPage> {
   final CameraConnectionManager _cameraManager = CameraConnectionManager();
   final CrestronCipConnection _cipConnection = CrestronCipConnection();
 
+  /// 页面选择导航按钮的入站 join 订阅令牌（中控模式：中控置某页 join 为高 → App 切页）
+  final List<String> _pageSelectSubTokens = [];
+
   /// 根据当前配置动态构建页面列表
   /// 每次调用都会重新读取 DeviceConfig 中的显示开关状态
   /// 这样配置页面修改开关后，返回主页面能立即生效
@@ -234,7 +237,43 @@ class _MainPageState extends State<MainPage> {
     return entries;
   }
 
-  /// 当前页面条目列表（每次build时动态获取，确保配置修改后实时生效）
+  /// 页面选择导航按钮对应的数字 join 号（中控模式）
+  /// 仅【显示中】的页面参与：join = 基址 + 可见序号（可见序号从 0 开始，
+  /// 按页面在导航栏出现的顺序递增），隐藏页面不占号。
+  int _pageSelectJoin(int visibleIndex) =>
+      _config.joinPageSelectBase + visibleIndex;
+
+  /// 刷新"页面选择"入站 join 订阅（中控模式）
+  /// - 清空旧订阅，避免页面显隐/基址变化后串号
+  /// - 仅在中控模式为每个可见页订阅 [基址 + 可见序号] 的入站数字 join：
+  ///   中控将该 join 置高 → App 切到对应页面（与"点击导航按钮"等效，双向同步）
+  void _refreshPageSelectSubscriptions() {
+    for (final String t in _pageSelectSubTokens) {
+      _cipConnection.unsubscribe(t);
+    }
+    _pageSelectSubTokens.clear();
+
+    if (!_config.crestronMode) return;
+
+    final int count = _pageCount;
+    for (int i = 0; i < count; i++) {
+      final int capturedIndex = i; // 捕获当前可见序号，避免闭包拿到错误值
+      final String token = _cipConnection.subscribe(
+        'd',
+        _pageSelectJoin(i),
+        (String sig, int join, dynamic value) {
+          // 仅响应"按下"边沿（join=1/true），切到对应页面
+          if (value == 1 || value == true) {
+            _switchToPage(capturedIndex);
+          }
+        },
+        direction: 'in',
+      );
+      _pageSelectSubTokens.add(token);
+    }
+  }
+
+
   List<_PageEntry> get _pageEntries => _buildPageEntries();
   int get _pageCount => _pageEntries.length;
 
@@ -243,11 +282,19 @@ class _MainPageState extends State<MainPage> {
   void _onConfigChanged() {
     if (!mounted) return;
 
+    // 每次配置变化（含中控模式开关、页面显隐、页面选择基址、加载完成）都重建
+    // "页面选择"入站 join 订阅：清空旧订阅，按当前可见页集合重新订阅，避免串号
+    _refreshPageSelectSubscriptions();
+
     // 检测 Crestron 双模式开关变化：开启则全局连接 CIP，关闭则断开并恢复当前页直连
     // 注意：配置从 SharedPreferences 异步恢复完成时也会走到这里
     // （App 重启后 crestronMode=true 的场景依赖此分支建立全局 CIP 连接）
     if (_config.crestronMode != _crestronModeActive) {
       _crestronModeActive = _config.crestronMode;
+      // 先捕获当前已加载的真实 CIP 身份，供下方「身份变化检测」做基准对比。
+      // 否则首屏时缓存的 _cipHost 等仍为初始空值，会被误判为"变化"从而
+      // 触发多余的 disconnect+connect，导致启动时出现重复建连/双会话。
+      if (_crestronModeActive) _captureCipIdentity();
       if (_crestronModeActive) {
         // 切入中控模式：先断开启动早期可能已按“直连模式”建立的设备连接，
         // 避免它们在后台反复重连刷错误日志
@@ -339,15 +386,12 @@ class _MainPageState extends State<MainPage> {
     _config.ensureLoaded().then((_) {
       if (!mounted) return;
       _cameraManager.rebuild();
-      // 配置异步加载完成后，若处于中控模式，用真实凭据重连 CIP。
-      // 否则 initState 早期那次 connect() 会用默认空凭据建立连接，
-      // 之后永不重连，导致 SCIP 登录一直发空用户名/密码而被 0x40 reject。
-      if (_config.crestronMode) {
-        _crestronModeActive = true;
-        _captureCipIdentity();
-        _cipConnection.disconnect();
-        _cipConnection.connect();
-      }
+      // 兜底：确保异步加载完成后（页面集合/基址已确定）订阅一次页面选择入站 join。
+      // 正常情况下 _onConfigChanged（加载完成 notifyListeners）已重建订阅，此处防止遗漏。
+      _refreshPageSelectSubscriptions();
+      // 配置异步加载完成后，CIP 全局连接由 _onConfigChanged（DeviceConfig 加载
+      // 完成时的 notifyListeners 触发）统一建立，无需在此重复 connect，
+      // 否则会与 _onConfigChanged 的建连叠加，造成启动时重复建连/双会话。
       // 等首帧布局完成后再触发当前页 onConnect（摄像头此时已用真实配置就绪）
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -366,6 +410,12 @@ class _MainPageState extends State<MainPage> {
 
     setState(() => _currentIndex = newIndex);
 
+    // 中控模式：点击页面选择导航按钮 → 脉冲该页面对应的数字 join（基址 + 可见序号），
+    // 向中控上报"用户切到了第 N 页"。中控置同一 join 为高也会经订阅回调走到这里（双向同步）。
+    if (_config.crestronMode) {
+      _cipConnection.pulse(_pageSelectJoin(newIndex));
+    }
+
     if (_pageController.hasClients) {
       _pageController.animateToPage(
         newIndex,
@@ -377,6 +427,11 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    // 移除页面选择入站 join 订阅，避免回调访问已销毁的 State
+    for (final String t in _pageSelectSubTokens) {
+      _cipConnection.unsubscribe(t);
+    }
+    _pageSelectSubTokens.clear();
     // 移除配置变化监听器，避免内存泄漏
     _config.removeListener(_onConfigChanged);
     _pageController.dispose();
