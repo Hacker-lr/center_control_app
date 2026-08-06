@@ -2037,6 +2037,360 @@ class DeviceConfig extends ChangeNotifier {
     debugPrint('[DeviceConfig] 所有配置已重置为默认值');
   }
 
+  /// ============================================================
+  /// 十八、配置导出 / 导入（JSON 文件）
+  /// ============================================================
+  /// 收集当前「设备相关」运行时配置为可序列化 Map。
+  /// 不含纯界面相关项：网格布局(grid*/gridItemsPerPage/gridRowCount 等)、
+  /// 长按交互(longPressDurationMs/longPressTickIntervalMs)、通道命名上限
+  /// (channelNameMaxLength)，以及 static const 主题色等不支持运行时修改的常量。
+  /// 导入时复用本 Map 结构，仅覆盖出现的键，逐字段赋值后批量持久化。
+
+  /// 配置导出 schema 版本（文件结构演进时 +1，导入据此做兼容）
+  static const int configSchemaVersion = 1;
+
+  /// 收集当前所有运行时配置为可序列化的 Map
+  Map<String, dynamic> toExportMap() {
+    return {
+      'powerDeviceIp': _powerDeviceIp,
+      'powerDevicePort': _powerDevicePort,
+      'ledPowerDeviceIp': _ledPowerDeviceIp,
+      'ledPowerDevicePort': _ledPowerDevicePort,
+      'matrixDeviceIp': _matrixDeviceIp,
+      'matrixDevicePort': _matrixDevicePort,
+      'matrixBrand': _matrixBrand,
+      'bigScreenBrand': _bigScreenBrand,
+      'powerBrand': _powerBrand,
+      'ledPowerBrand': _ledPowerBrand,
+      'cameraDevices': _cameraDevices
+          .map((d) => Map<String, dynamic>.from(d))
+          .toList(),
+      'cipHost': _cipHost,
+      'cipPort': _cipPort,
+      'cipIpId': _cipIpId,
+      'cipSecure': _cipSecure,
+      'cipUsername': _cipUsername,
+      'cipPassword': _cipPassword,
+      'cipPulseHoldMs': _cipPulseHoldMs,
+      'crestronMode': _crestronMode,
+      'joinPowerOn': _joinPowerOn,
+      'joinPowerOff': _joinPowerOff,
+      'joinLayoutFull': _joinLayoutFull,
+      'joinLayoutFull169': _joinLayoutFull169,
+      'joinLayoutSplit2': _joinLayoutSplit2,
+      'joinLayoutSplit3': _joinLayoutSplit3,
+      'joinLayoutSplit4': _joinLayoutSplit4,
+      'joinLayoutSplit5': _joinLayoutSplit5,
+      'joinMatrixInputBase': _joinMatrixInputBase,
+      'joinMatrixOutputBase': _joinMatrixOutputBase,
+      'joinCamUp': _joinCamUp,
+      'joinCamDown': _joinCamDown,
+      'joinCamLeft': _joinCamLeft,
+      'joinCamRight': _joinCamRight,
+      'joinCamTele': _joinCamTele,
+      'joinCamWide': _joinCamWide,
+      'joinCamPresetRecallBase': _joinCamPresetRecallBase,
+      'joinCamSpeedLow': _joinCamSpeedLow,
+      'joinCamSpeedHigh': _joinCamSpeedHigh,
+      'joinCamSaveBtn': _joinCamSaveBtn,
+      'joinCamSelectBase': _joinCamSelectBase,
+      'joinPageSelectBase': _joinPageSelectBase,
+      'joinLedPowerOn': _joinLedPowerOn,
+      'joinLedPowerOff': _joinLedPowerOff,
+      'connectionTimeoutSeconds': _connectionTimeoutSeconds,
+      'heartbeatIntervalSeconds': _heartbeatIntervalSeconds,
+      'heartbeatTimeoutMultiplier': _heartbeatTimeoutMultiplier,
+      'reconnectIntervalSeconds': _reconnectIntervalSeconds,
+      'powerUseTcp': _powerUseTcp,
+      'matrixUseTcp': _matrixUseTcp,
+      'bigScreenUseTcp': _bigScreenUseTcp,
+      'ledPowerUseTcp': _ledPowerUseTcp,
+      'powerSendAsHex': _powerSendAsHex,
+      'matrixSendAsHex': _matrixSendAsHex,
+      'bigScreenSendAsHex': _bigScreenSendAsHex,
+      'ledPowerSendAsHex': _ledPowerSendAsHex,
+      'cameraSendAsHex': _cameraSendAsHex,
+      'matrixInputCount': _matrixInputCount,
+      'matrixOutputCount': _matrixOutputCount,
+      'bigScreenOutputChannels': List<int>.from(_bigScreenOutputChannels),
+      'powerOnAsciiCmd': _powerOnAsciiCmd,
+      'powerOffAsciiCmd': _powerOffAsciiCmd,
+      'matrixSwitchAsciiCmd': _matrixSwitchAsciiCmd,
+      'bigScreenLayoutAsciiCmd': _bigScreenLayoutAsciiCmd,
+      'hexPowerOnCmd': _hexPowerOnCmd,
+      'hexPowerOffCmd': _hexPowerOffCmd,
+      'hexMatrixSwitchCmd': _hexMatrixSwitchCmd,
+      'hexBigScreenLayoutCmd': _hexBigScreenLayoutCmd,
+      'ledPowerOnAsciiCmd': _ledPowerOnAsciiCmd,
+      'ledPowerOffAsciiCmd': _ledPowerOffAsciiCmd,
+      'hexLedPowerOnCmd': _hexLedPowerOnCmd,
+      'hexLedPowerOffCmd': _hexLedPowerOffCmd,
+      'cameraSpeedLow': _cameraSpeedLow,
+      'cameraSpeedHigh': _cameraSpeedHigh,
+      'cameraPresetCount': _cameraPresetCount,
+    };
+  }
+
+  /// 类型安全的取值辅助：键存在且类型匹配则返回该值，否则 null
+  T? _typed<T>(Map<String, dynamic> m, String key) {
+    final v = m[key];
+    return v is T ? v : null;
+  }
+
+  /// 从导出 Map 应用配置。
+  /// 仅覆盖 [m] 中出现的键；未出现的键保留当前值（便于只改部分字段再导入）。
+  /// 应用后批量持久化并通知监听者。
+  void applyImportMap(Map<String, dynamic> m) {
+    String? s;
+    int? i;
+    bool? b;
+    if ((s = _typed<String>(m, 'powerDeviceIp')) != null) _powerDeviceIp = s!;
+    if ((i = _typed<int>(m, 'powerDevicePort')) != null) _powerDevicePort = i!;
+    if ((s = _typed<String>(m, 'ledPowerDeviceIp')) != null) _ledPowerDeviceIp = s!;
+    if ((i = _typed<int>(m, 'ledPowerDevicePort')) != null) _ledPowerDevicePort = i!;
+    if ((s = _typed<String>(m, 'matrixDeviceIp')) != null) _matrixDeviceIp = s!;
+    if ((i = _typed<int>(m, 'matrixDevicePort')) != null) _matrixDevicePort = i!;
+    if ((s = _typed<String>(m, 'matrixBrand')) != null) _matrixBrand = s!;
+    if ((s = _typed<String>(m, 'bigScreenBrand')) != null) _bigScreenBrand = s!;
+    if ((s = _typed<String>(m, 'powerBrand')) != null) _powerBrand = s!;
+    if ((s = _typed<String>(m, 'ledPowerBrand')) != null) _ledPowerBrand = s!;
+
+    final cam = m['cameraDevices'];
+    if (cam is List) {
+      _cameraDevices = cam.whereType<Map>().map((e) {
+        final Map<dynamic, dynamic> src = e;
+        return <String, dynamic>{
+          'ip': src['ip'] is String ? src['ip'] : ConfigDefaults.deviceIp,
+          'port': src['port'] is int ? src['port'] : ConfigDefaults.viscaPort,
+          'viscaAddr':
+              src['viscaAddr'] is int ? src['viscaAddr'] : 1,
+          'useTcp': src['useTcp'] is bool ? src['useTcp'] : true,
+        };
+      }).toList();
+    }
+
+    if ((s = _typed<String>(m, 'cipHost')) != null) _cipHost = s!;
+    if ((i = _typed<int>(m, 'cipPort')) != null) _cipPort = i!;
+    if ((i = _typed<int>(m, 'cipIpId')) != null) _cipIpId = i!.clamp(0, 0xFF);
+    if ((b = _typed<bool>(m, 'cipSecure')) != null) _cipSecure = b!;
+    if ((s = _typed<String>(m, 'cipUsername')) != null) _cipUsername = s!;
+    if ((s = _typed<String>(m, 'cipPassword')) != null) _cipPassword = s!;
+    if ((i = _typed<int>(m, 'cipPulseHoldMs')) != null) {
+      _cipPulseHoldMs = i!.clamp(0, 2000);
+    }
+    if ((b = _typed<bool>(m, 'crestronMode')) != null) _crestronMode = b!;
+
+    if ((i = _typed<int>(m, 'joinPowerOn')) != null) _joinPowerOn = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinPowerOff')) != null) _joinPowerOff = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinLayoutFull')) != null) _joinLayoutFull = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinLayoutFull169')) != null) {
+      _joinLayoutFull169 = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinLayoutSplit2')) != null) {
+      _joinLayoutSplit2 = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinLayoutSplit3')) != null) {
+      _joinLayoutSplit3 = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinLayoutSplit4')) != null) {
+      _joinLayoutSplit4 = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinLayoutSplit5')) != null) {
+      _joinLayoutSplit5 = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinMatrixInputBase')) != null) {
+      _joinMatrixInputBase = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinMatrixOutputBase')) != null) {
+      _joinMatrixOutputBase = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinCamUp')) != null) _joinCamUp = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinCamDown')) != null) _joinCamDown = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinCamLeft')) != null) _joinCamLeft = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinCamRight')) != null) _joinCamRight = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinCamTele')) != null) _joinCamTele = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinCamWide')) != null) _joinCamWide = i!.clamp(1, 9999);
+    if ((i = _typed<int>(m, 'joinCamPresetRecallBase')) != null) {
+      _joinCamPresetRecallBase = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinCamSpeedLow')) != null) {
+      _joinCamSpeedLow = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinCamSpeedHigh')) != null) {
+      _joinCamSpeedHigh = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinCamSaveBtn')) != null) {
+      _joinCamSaveBtn = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinCamSelectBase')) != null) {
+      _joinCamSelectBase = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinPageSelectBase')) != null) {
+      _joinPageSelectBase = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinLedPowerOn')) != null) {
+      _joinLedPowerOn = i!.clamp(1, 9999);
+    }
+    if ((i = _typed<int>(m, 'joinLedPowerOff')) != null) {
+      _joinLedPowerOff = i!.clamp(1, 9999);
+    }
+
+    if ((i = _typed<int>(m, 'connectionTimeoutSeconds')) != null) {
+      _connectionTimeoutSeconds = i!;
+    }
+    if ((i = _typed<int>(m, 'heartbeatIntervalSeconds')) != null) {
+      _heartbeatIntervalSeconds = i!;
+    }
+    if ((i = _typed<int>(m, 'heartbeatTimeoutMultiplier')) != null) {
+      _heartbeatTimeoutMultiplier = i!;
+    }
+    if ((i = _typed<int>(m, 'reconnectIntervalSeconds')) != null) {
+      _reconnectIntervalSeconds = i!;
+    }
+
+    if ((b = _typed<bool>(m, 'powerUseTcp')) != null) _powerUseTcp = b!;
+    if ((b = _typed<bool>(m, 'matrixUseTcp')) != null) _matrixUseTcp = b!;
+    if ((b = _typed<bool>(m, 'bigScreenUseTcp')) != null) _bigScreenUseTcp = b!;
+    if ((b = _typed<bool>(m, 'ledPowerUseTcp')) != null) _ledPowerUseTcp = b!;
+    if ((b = _typed<bool>(m, 'powerSendAsHex')) != null) _powerSendAsHex = b!;
+    if ((b = _typed<bool>(m, 'matrixSendAsHex')) != null) _matrixSendAsHex = b!;
+    if ((b = _typed<bool>(m, 'bigScreenSendAsHex')) != null) _bigScreenSendAsHex = b!;
+    if ((b = _typed<bool>(m, 'ledPowerSendAsHex')) != null) _ledPowerSendAsHex = b!;
+    if ((b = _typed<bool>(m, 'cameraSendAsHex')) != null) _cameraSendAsHex = b!;
+
+    if ((i = _typed<int>(m, 'matrixInputCount')) != null) _matrixInputCount = i!;
+    if ((i = _typed<int>(m, 'matrixOutputCount')) != null) _matrixOutputCount = i!;
+
+    final out = m['bigScreenOutputChannels'];
+    if (out is List) {
+      _bigScreenOutputChannels = List<int>.from(out.whereType<int>());
+    }
+
+    if ((s = _typed<String>(m, 'powerOnAsciiCmd')) != null) _powerOnAsciiCmd = s!;
+    if ((s = _typed<String>(m, 'powerOffAsciiCmd')) != null) _powerOffAsciiCmd = s!;
+    if ((s = _typed<String>(m, 'matrixSwitchAsciiCmd')) != null) {
+      _matrixSwitchAsciiCmd = s!;
+    }
+    if ((s = _typed<String>(m, 'bigScreenLayoutAsciiCmd')) != null) {
+      _bigScreenLayoutAsciiCmd = s!;
+    }
+    if ((s = _typed<String>(m, 'hexPowerOnCmd')) != null) _hexPowerOnCmd = s!;
+    if ((s = _typed<String>(m, 'hexPowerOffCmd')) != null) _hexPowerOffCmd = s!;
+    if ((s = _typed<String>(m, 'hexMatrixSwitchCmd')) != null) _hexMatrixSwitchCmd = s!;
+    if ((s = _typed<String>(m, 'hexBigScreenLayoutCmd')) != null) {
+      _hexBigScreenLayoutCmd = s!;
+    }
+    if ((s = _typed<String>(m, 'ledPowerOnAsciiCmd')) != null) _ledPowerOnAsciiCmd = s!;
+    if ((s = _typed<String>(m, 'ledPowerOffAsciiCmd')) != null) _ledPowerOffAsciiCmd = s!;
+    if ((s = _typed<String>(m, 'hexLedPowerOnCmd')) != null) _hexLedPowerOnCmd = s!;
+    if ((s = _typed<String>(m, 'hexLedPowerOffCmd')) != null) _hexLedPowerOffCmd = s!;
+
+    if ((i = _typed<int>(m, 'cameraSpeedLow')) != null) _cameraSpeedLow = i!;
+    if ((i = _typed<int>(m, 'cameraSpeedHigh')) != null) _cameraSpeedHigh = i!;
+    if ((i = _typed<int>(m, 'cameraPresetCount')) != null) {
+      _cameraPresetCount = i!.clamp(1, 16);
+    }
+
+    // 品牌名可能随文件改变，做一次有效性纠正（仅当品牌名在列表中不存在时回退首项），
+    // 避免配置页 DropdownButton 因 value 不在 items 中而抛异常。
+    _validateBrandName();
+
+    // 批量持久化所有字段到 SharedPreferences
+    _persistAll();
+    notifyListeners();
+  }
+
+  /// 将所有运行时字段批量写入 SharedPreferences（与 _loadAllConfig 对称）。
+  /// 供导入配置后一次性落盘，避免逐字段触发多次 notify。
+  void _persistAll() {
+    _saveString('powerDeviceIp', _powerDeviceIp);
+    _saveInt('powerDevicePort', _powerDevicePort);
+    _saveString('ledPowerDeviceIp', _ledPowerDeviceIp);
+    _saveInt('ledPowerDevicePort', _ledPowerDevicePort);
+    _saveString('matrixDeviceIp', _matrixDeviceIp);
+    _saveInt('matrixDevicePort', _matrixDevicePort);
+    _saveString('matrixBrand', _matrixBrand);
+    _saveString('bigScreenBrand', _bigScreenBrand);
+    _saveString('powerBrand', _powerBrand);
+    _saveString('ledPowerBrand', _ledPowerBrand);
+    _saveCameraDevices();
+    _saveString('cipHost', _cipHost);
+    _saveInt('cipPort', _cipPort);
+    _saveInt('cipIpId', _cipIpId);
+    _saveBool('cipSecure', _cipSecure);
+    _saveString('cipUsername', _cipUsername);
+    _saveString('cipPassword', _cipPassword);
+    _saveInt('cipPulseHoldMs', _cipPulseHoldMs);
+    _saveBool('crestronMode', _crestronMode);
+    _saveInt('joinPowerOn', _joinPowerOn);
+    _saveInt('joinPowerOff', _joinPowerOff);
+    _saveInt('joinLayoutFull', _joinLayoutFull);
+    _saveInt('joinLayoutFull169', _joinLayoutFull169);
+    _saveInt('joinLayoutSplit2', _joinLayoutSplit2);
+    _saveInt('joinLayoutSplit3', _joinLayoutSplit3);
+    _saveInt('joinLayoutSplit4', _joinLayoutSplit4);
+    _saveInt('joinLayoutSplit5', _joinLayoutSplit5);
+    _saveInt('joinMatrixInputBase', _joinMatrixInputBase);
+    _saveInt('joinMatrixOutputBase', _joinMatrixOutputBase);
+    _saveInt('joinCamUp', _joinCamUp);
+    _saveInt('joinCamDown', _joinCamDown);
+    _saveInt('joinCamLeft', _joinCamLeft);
+    _saveInt('joinCamRight', _joinCamRight);
+    _saveInt('joinCamTele', _joinCamTele);
+    _saveInt('joinCamWide', _joinCamWide);
+    _saveInt('joinCamPresetRecallBase', _joinCamPresetRecallBase);
+    _saveInt('joinCamSpeedLow', _joinCamSpeedLow);
+    _saveInt('joinCamSpeedHigh', _joinCamSpeedHigh);
+    _saveInt('joinCamSaveBtn', _joinCamSaveBtn);
+    _saveInt('joinCamSelectBase', _joinCamSelectBase);
+    _saveInt('joinPageSelectBase', _joinPageSelectBase);
+    _saveInt('joinLedPowerOn', _joinLedPowerOn);
+    _saveInt('joinLedPowerOff', _joinLedPowerOff);
+    _saveInt('connectionTimeoutSeconds', _connectionTimeoutSeconds);
+    _saveInt('heartbeatIntervalSeconds', _heartbeatIntervalSeconds);
+    _saveInt('heartbeatTimeoutMultiplier', _heartbeatTimeoutMultiplier);
+    _saveInt('reconnectIntervalSeconds', _reconnectIntervalSeconds);
+    _saveBool('powerUseTcp', _powerUseTcp);
+    _saveBool('matrixUseTcp', _matrixUseTcp);
+    _saveBool('bigScreenUseTcp', _bigScreenUseTcp);
+    _saveBool('ledPowerUseTcp', _ledPowerUseTcp);
+    _saveBool('powerSendAsHex', _powerSendAsHex);
+    _saveBool('matrixSendAsHex', _matrixSendAsHex);
+    _saveBool('bigScreenSendAsHex', _bigScreenSendAsHex);
+    _saveBool('ledPowerSendAsHex', _ledPowerSendAsHex);
+    _saveBool('cameraSendAsHex', _cameraSendAsHex);
+    _saveInt('matrixInputCount', _matrixInputCount);
+    _saveInt('matrixOutputCount', _matrixOutputCount);
+    _saveBigScreenOutputChannels();
+    _saveString('powerOnAsciiCmd', _powerOnAsciiCmd);
+    _saveString('powerOffAsciiCmd', _powerOffAsciiCmd);
+    _saveString('matrixSwitchAsciiCmd', _matrixSwitchAsciiCmd);
+    _saveString('bigScreenLayoutAsciiCmd', _bigScreenLayoutAsciiCmd);
+    _saveString('hexPowerOnCmd', _hexPowerOnCmd);
+    _saveString('hexPowerOffCmd', _hexPowerOffCmd);
+    _saveString('hexMatrixSwitchCmd', _hexMatrixSwitchCmd);
+    _saveString('hexBigScreenLayoutCmd', _hexBigScreenLayoutCmd);
+    _saveString('ledPowerOnAsciiCmd', _ledPowerOnAsciiCmd);
+    _saveString('ledPowerOffAsciiCmd', _ledPowerOffAsciiCmd);
+    _saveString('hexLedPowerOnCmd', _hexLedPowerOnCmd);
+    _saveString('hexLedPowerOffCmd', _hexLedPowerOffCmd);
+    _saveInt('cameraSpeedLow', _cameraSpeedLow);
+    _saveInt('cameraSpeedHigh', _cameraSpeedHigh);
+    _saveInt('cameraPresetCount', _cameraPresetCount);
+    _saveInt('gridItemsPerPage', _gridItemsPerPage);
+    _saveInt('gridRowCount', _gridRowCount);
+    _saveDouble('gridBtnHeightFactor', _gridBtnHeightFactor);
+    _saveDouble('gridSpacing4Cross', _gridSpacing4Cross);
+    _saveDouble('gridSpacing4Main', _gridSpacing4Main);
+    _saveDouble('gridSpacing8Cross', _gridSpacing8Cross);
+    _saveDouble('gridSpacing8Main', _gridSpacing8Main);
+    _saveDouble('gridHorizontalPadding', _gridHorizontalPadding);
+    _saveDouble('gridVerticalPadding', _gridVerticalPadding);
+    _saveInt('longPressDurationMs', _longPressDurationMs);
+    _saveInt('longPressTickIntervalMs', _longPressTickIntervalMs);
+    _saveInt('channelNameMaxLength', _channelNameMaxLength);
+  }
+
   /// 持久化存储辅助方法
   String _loadString(String key, String defaultValue) =>
       _prefs?.getString('$_keyPrefix$key') ?? defaultValue;

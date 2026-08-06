@@ -142,7 +142,7 @@ class _CameraControlPageState extends State<CameraControlPage>
         SizedBox(height: ResponsiveUtils.getSpacing(context, 6)),
         _buildConnectionStatus(),
         SizedBox(height: ResponsiveUtils.getSpacing(context, 6)),
-        _buildCameraSelection(),
+        _buildCameraSelectionCard(landscape: false),
         SizedBox(height: ResponsiveUtils.getSpacing(context, 6)),
         Expanded(
           flex: 5,
@@ -181,8 +181,8 @@ class _CameraControlPageState extends State<CameraControlPage>
         // 顶部：连接状态居中
         Center(child: _buildConnectionStatus()),
         SizedBox(height: ResponsiveUtils.getSpacing(context, 4)),
-        // 顶部：摄像头选择居中
-        Center(child: _buildCameraSelectionLandscape()),
+        // 顶部：摄像头选择（带组件框，与连接状态分隔）
+        _buildCameraSelectionCard(landscape: true),
         SizedBox(height: ResponsiveUtils.getSpacing(context, 6)),
         // 主体：左侧云台控制 + 右侧变焦/速度/预置位
         Expanded(
@@ -376,6 +376,45 @@ class _CameraControlPageState extends State<CameraControlPage>
           ),
         );
       }),
+    );
+  }
+
+  /// 摄像头选择「组件框」：
+  /// 用带边框的卡片把摄像头选择按钮整组包起来，与上方连接状态芯片视觉分隔，
+  /// 提升层次感（与下方云台/变焦/预置位 section card 风格一致）。
+  /// [landscape] 决定内部选择按钮用横屏紧凑版还是竖屏版。
+  Widget _buildCameraSelectionCard({required bool landscape}) {
+    final Widget selection =
+        landscape ? _buildCameraSelectionLandscape() : _buildCameraSelection();
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(ResponsiveUtils.getSpacing(context, 8)),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1117),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF1E2228), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(
+              left: ResponsiveUtils.getSpacing(context, 4),
+              bottom: ResponsiveUtils.getSpacing(context, 6),
+            ),
+            child: Text(
+              '摄像头选择',
+              style: TextStyle(
+                fontSize: ResponsiveUtils.getFontSize(context, 12),
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[500],
+                letterSpacing: 1.0,
+              ),
+            ),
+          ),
+          Center(child: selection),
+        ],
+      ),
     );
   }
 

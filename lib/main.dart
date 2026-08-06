@@ -217,7 +217,10 @@ class _MainPageState extends State<MainPage> {
       );
     }
 
-    if (_config.showCrestronControl) {
+    // Crestron 控制页仅在【中控(VTP)模式开启】且【显示开关打开】时可见。
+    // VTP 关闭（普通直连模式）时无论 showCrestronControl 是否为 true 都不显示，
+    // 因为该页本质是 CIP/VTP 控制页，直连模式下无对应功能。
+    if (_config.showCrestronControl && _config.crestronMode) {
       entries.add(
         _PageEntry(
           icon: Icons.memory,

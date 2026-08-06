@@ -737,6 +737,7 @@ Widget buildPageVisibilitySwitch({
   String? subtitle,
   required bool value,
   required ValueChanged<bool> onChanged,
+  bool enabled = true,
 }) {
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -748,9 +749,9 @@ Widget buildPageVisibilitySwitch({
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: Colors.white,
+                  color: enabled ? Colors.white : Colors.grey,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -766,7 +767,7 @@ Widget buildPageVisibilitySwitch({
         ),
         Switch(
           value: value,
-          onChanged: onChanged,
+          onChanged: enabled ? onChanged : null,
           activeThumbColor: DeviceConfig.colorAccent,
         ),
       ],

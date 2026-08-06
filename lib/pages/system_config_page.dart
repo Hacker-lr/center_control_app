@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/device_config.dart';
 import '../services/camera_connection.dart';
+import '../services/config_import_export.dart';
 import '../widgets/config_form_widgets.dart';
 
 /// ============================================================
@@ -499,6 +500,87 @@ class _SystemConfigPageState extends State<SystemConfigPage>
     );
   }
 
+  /// 导出当前配置到 TOML 文件（含 DeviceConfig 运行时字段 + 通道名称）
+  Future<void> _exportConfig() async {
+    final String? path = await ConfigImportExport.exportConfig();
+    if (path == null) return; // 用户取消选择
+    if (!mounted) return;
+    final bool hasPassword = DeviceConfig().cipPassword.isNotEmpty;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          hasPassword
+              ? '配置已导出（含明文密码，请妥善保管）：\n$path'
+              : '配置已导出：$path',
+        ),
+        backgroundColor: hasPassword
+            ? DeviceConfig.colorStatusConnecting
+            : DeviceConfig.colorStatusConnected,
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// 从 TOML 文件导入配置（导入前二次确认，会覆盖当前配置）
+  Future<void> _importConfig() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: DeviceConfig.colorDialogBg,
+        title: const Text('导入配置'),
+        content: const Text(
+          '导入将用文件中的配置覆盖当前设置（仅覆盖文件中包含的字段）。\n'
+          '若文件含 CIP 密码，将以明文形式存在于文件中，请注意保管。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('继续导入'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final (bool success, bool hasPassword, String? err) =
+        await ConfigImportExport.importConfig();
+    if (!mounted) return;
+    if (!success) {
+      if (err != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(err),
+            backgroundColor: DeviceConfig.colorStatusError,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+    // 刷新本页输入框显示 + 重建摄像头连接实例，使导入即刻生效
+    setState(() => _loadConfig());
+    CameraConnectionManager().rebuild();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          hasPassword
+              ? '配置已导入（注意：文件含明文密码，请妥善保管）'
+              : '配置已导入',
+        ),
+        backgroundColor: hasPassword
+            ? DeviceConfig.colorStatusConnecting
+            : DeviceConfig.colorStatusConnected,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   /// 解析 CIP IP-ID 输入：兼容多种写法
   /// - 带 0x/0X 前缀的十六进制（如 "0x10"）
   /// - 纯十六进制（如 "10" → 0x10 = 十进制 16）
@@ -788,7 +870,11 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                                   ),
                                   buildPageVisibilitySwitch(
                                     title: '显示 Crestron 页面',
+                                    subtitle: _crestronMode
+                                        ? null
+                                        : '仅中控(VTP)模式开启后可选',
                                     value: _showCrestronControl,
+                                    enabled: _crestronMode,
                                     onChanged: (v) => setState(
                                       () => _showCrestronControl = v,
                                     ),
@@ -1280,6 +1366,47 @@ class _SystemConfigPageState extends State<SystemConfigPage>
                       setState(() => _showCameraControl = value),
                 ),
               ],
+            ),
+            // ===== 配置导入 / 导出 =====
+            _buildZoneHeader('配置备份', Icons.backup),
+            const SizedBox(height: 2),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _exportConfig,
+                      icon: const Icon(Icons.upload_file_outlined, size: 18),
+                      label: const Text('导出配置'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: DeviceConfig.colorAccent,
+                        side: BorderSide(color: DeviceConfig.colorAccent),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _importConfig,
+                      icon: const Icon(Icons.download_outlined, size: 18),
+                      label: const Text('导入配置'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: DeviceConfig.colorAccent,
+                        side: BorderSide(color: DeviceConfig.colorAccent),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             SizedBox(

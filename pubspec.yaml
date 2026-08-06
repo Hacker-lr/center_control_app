@@ -32,6 +32,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.3.4
   crypto: ^3.0.3
+  file_selector: ^1.0.0
+  toml: ^0.18.0
 
 dev_dependencies:
   flutter_test:

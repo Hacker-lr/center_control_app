@@ -179,31 +179,27 @@ class _PowerControlPageState extends State<PowerControlPage> {
                           ],
                         );
 
-                        // 整页内容（chip行+卡片+状态文字）放进 SCV + Column：
-                        // 任何高度下 SCV 内 Column 永无界，固定项总和不再溢出
-                        // 闪现黄黑条（与矩阵页/大屏页"整体可滚动"机制一致）。
-                        // ConstrainedBox(minHeight=视口) 让内容不足时填满居中。
-                        return SingleChildScrollView(
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: constraints.maxHeight,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildConnectionStatusIndicator(),
-                                const SizedBox(height: midGap),
-                                Center(
-                                  child: SizedBox(
-                                    width: cardMaxW,
-                                    child: cardsWidget,
-                                  ),
-                                ),
-                                const SizedBox(height: midGap),
-                                _buildStatusText(),
-                                const SizedBox(height: bottomGap),
-                              ],
-                            ),
+                        // 整页内容（chip行+卡片+状态文字）直接放入固定 Column，
+                        // 不再使用 SingleChildScrollView —— 用户要求本页完全不可滚动。
+                        // perCardH 已按可用高度预算均分，正常窗口下内容恰好填满、
+                        // 不溢出也不滚动；极端矮窗口时由外层 FittedBox(scaleDown)
+                        // 整块等比缩小兜底，保证永不溢出、永不出现滚动条/黄黑条。
+                        return FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              _buildConnectionStatusIndicator(),
+                              const SizedBox(height: midGap),
+                              SizedBox(
+                                width: cardMaxW,
+                                child: cardsWidget,
+                              ),
+                              const SizedBox(height: midGap),
+                              _buildStatusText(),
+                              const SizedBox(height: bottomGap),
+                            ],
                           ),
                         );
                       },

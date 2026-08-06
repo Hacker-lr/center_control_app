@@ -200,4 +200,59 @@ class ChannelNameManager extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// ============================================================
+  /// 通道名称导出 / 导入（JSON 文件，配合 DeviceConfig 一起备份）
+  /// ============================================================
+
+  /// 收集所有已自定义的通道名称为结构化 Map。
+  /// 仅导出用户真正改过的名称（未改动的用默认数字编号，无需备份）。
+  Map<String, dynamic> exportNames() {
+    final Map<String, dynamic> inputs = {};
+    final Map<String, dynamic> outputs = {};
+    final Map<String, dynamic> cameras = {};
+    final Map<String, dynamic> presets = {};
+    final Set<String> keys = _prefs?.getKeys() ?? {};
+    for (final key in keys) {
+      if (key.startsWith(_inputPrefix)) {
+        inputs[key.substring(_inputPrefix.length)] =
+            _prefs?.getString(key) ?? '';
+      } else if (key.startsWith(_outputPrefix)) {
+        outputs[key.substring(_outputPrefix.length)] =
+            _prefs?.getString(key) ?? '';
+      } else if (key.startsWith(_cameraPrefix)) {
+        cameras[key.substring(_cameraPrefix.length)] =
+            _prefs?.getString(key) ?? '';
+      } else if (key.startsWith(_cameraPresetPrefix)) {
+        presets[key.substring(_cameraPresetPrefix.length)] =
+            _prefs?.getString(key) ?? '';
+      }
+    }
+    return {
+      'matrixInputs': inputs,
+      'matrixOutputs': outputs,
+      'cameras': cameras,
+      'cameraPresets': presets,
+    };
+  }
+
+  /// 从结构化 Map 导入通道名称。
+  /// 仅写入 [names] 中出现的键；未出现的键保留当前值（便于只改部分名称再导入）。
+  Future<void> importNames(Map<String, dynamic> names) async {
+    await init();
+    void loadGroup(String prefix, Object? group) {
+      if (group is! Map) return;
+      group.forEach((k, v) {
+        if (v is String && v.isNotEmpty) {
+          _prefs?.setString('$prefix$k', v);
+        }
+      });
+    }
+
+    loadGroup(_inputPrefix, names['matrixInputs']);
+    loadGroup(_outputPrefix, names['matrixOutputs']);
+    loadGroup(_cameraPrefix, names['cameras']);
+    loadGroup(_cameraPresetPrefix, names['cameraPresets']);
+    notifyListeners();
+  }
 }
