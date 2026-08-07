@@ -261,21 +261,19 @@ class _MainPageState extends State<MainPage> {
     final int count = _pageCount;
     for (int i = 0; i < count; i++) {
       final int capturedIndex = i; // 捕获当前可见序号，避免闭包拿到错误值
-      final String token = _cipConnection.subscribe(
-        'd',
-        _pageSelectJoin(i),
-        (String sig, int join, dynamic value) {
-          // 仅响应"按下"边沿（join=1/true），切到对应页面
-          if (value == 1 || value == true) {
-            _switchToPage(capturedIndex);
-          }
-        },
-        direction: 'in',
-      );
+      final String token = _cipConnection.subscribe('d', _pageSelectJoin(i), (
+        String sig,
+        int join,
+        dynamic value,
+      ) {
+        // 仅响应"按下"边沿（join=1/true），切到对应页面
+        if (value == 1 || value == true) {
+          _switchToPage(capturedIndex);
+        }
+      }, direction: 'in');
       _pageSelectSubTokens.add(token);
     }
   }
-
 
   List<_PageEntry> get _pageEntries => _buildPageEntries();
   int get _pageCount => _pageEntries.length;
